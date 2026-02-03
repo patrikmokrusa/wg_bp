@@ -14,6 +14,13 @@ class SyncDHT(SyncBase):
         
         if seed_node:
             self.dht = DHT(self.state.ip, port, seeds=seed_node)
+            # Initialize own peer info and keys when joining for redundancy
+            self.dht[self.state.ip] = {
+                "virtual_ip": self.state.ip,
+                "public_key": self.state.public_key,
+                "endpoint_ip": self.state.public_ip,
+                "endpoint_port": self.state.public_port
+            }
         else:
             self.dht = DHT(self.state.ip, port)
             self.dht[CHANGE_CHECK_KEY] = 0
@@ -51,14 +58,12 @@ class SyncDHT(SyncBase):
             self.appendToKeyList(virtual_ip)
 
         self.dht[CHANGE_CHECK_KEY] = self.dht[CHANGE_CHECK_KEY] + 1
-        time.sleep(1)  # give time to write the value
         self.CurrentChangeCheckValue = self.CurrentChangeCheckValue + 1
-        print(f"JOINING TEST:   val from {self.CurrentChangeCheckValue} to {self.dht[CHANGE_CHECK_KEY]}")
 
     def checkForChanges(self):
         current_value = self.dht[CHANGE_CHECK_KEY]
-        print(f"TEST:   val from {self.CurrentChangeCheckValue} to {current_value}")
-        if current_value > self.CurrentChangeCheckValue:
+        # print(f"TEST:   val from {self.CurrentChangeCheckValue} to {current_value}")
+        if current_value != self.CurrentChangeCheckValue:
             if self.CurrentChangeCheckValue != -1:
                 print(f"Detected changes in DHT... value changed from {self.CurrentChangeCheckValue} to {current_value}")
             self.fetchAndUpdateIter()

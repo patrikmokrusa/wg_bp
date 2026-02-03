@@ -131,6 +131,7 @@ def main():
             try:
                 bootstrap_thread = threading.Thread(target=disc.startAccept)
                 bootstrap_thread.start()
+
             except Exception as e:
                 print(f"Error in discovery join: {e}")
 
