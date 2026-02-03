@@ -18,4 +18,8 @@ class SyncBase(abc.ABC):
     @abc.abstractmethod
     def getInfo(self):
         pass
+
+    @abc.abstractmethod
+    def exitSync(self):
+        pass
     

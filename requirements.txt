@@ -1,1 +1,2 @@
 git+https://github.com/dakk/kad.py.git#egg=kad.py
+aiostun

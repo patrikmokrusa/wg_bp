@@ -1,8 +1,9 @@
 import subprocess
-import urllib.request
+import urllib
+import stun
 
 class State:
-    def __init__(self, ip, port = 51820, interface="wg0", keepalive=25):
+    def __init__(self, ip: str, port: int = 51820, interface="wg0", keepalive=25):
         self.private_key = None
         self.__gen_private_key()
         self.public_key = None
@@ -14,11 +15,27 @@ class State:
         self.keepalive = keepalive
         self.bootstrap_peer = None
         self.public_ip = None
+        self.public_port = None
         self.update_public_ip()
 
-    def update_public_ip(self):
+    def update_public_ip_request(self):
         external_ip = urllib.request.urlopen('https://api.ipify.org').read().decode('utf8')
         self.public_ip = external_ip
+
+    def update_public_ip(self):
+    
+        print("Determining public IP and port via STUN...")
+        mapped_addr = stun.get_ip_info('0.0.0.0', self.port, stun_host='stun1.l.google.com')
+        print(f"STUN result: {mapped_addr}")
+        if mapped_addr[1] is None or mapped_addr[2] is None:
+            print("Failed to get public IP via STUN.")
+            print("Falling back to HTTP request method...")
+            self.update_public_ip_request()
+            return
+        
+        
+        self.public_ip = mapped_addr[1]
+        self.public_port = mapped_addr[2]
 
     def __gen_private_key(self):
         cli = subprocess.Popen(["wg", "genkey"], stdout=subprocess.PIPE)
@@ -28,12 +45,12 @@ class State:
         cli = subprocess.Popen(["wg", "pubkey"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         self.public_key = cli.communicate(input=self.private_key.encode("utf-8"))[0].decode("utf-8")
 
-    def add_peer(self, peer_virtual_ip, public_key, endpoint_ip, endpoint_port=51820):
+    def add_peer(self, peer_virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int = 51820) -> None:
         if peer_virtual_ip == self.ip:
             return
         self.peers[peer_virtual_ip] = {"public_key": public_key, "endpoint_ip": endpoint_ip, "endpoint_port": endpoint_port}
 
-    def remove_peer(self, peer_virtual_ip):
+    def remove_peer(self, peer_virtual_ip: str) -> None:
         if peer_virtual_ip in self.peers:
             del self.peers[peer_virtual_ip]
 
@@ -73,7 +90,7 @@ class State:
     def interface_json(self):
         return {
             "ip": self.ip,
-            "port": self.port,
+            "port": self.public_port,
             "public_key": self.public_key,
             "public_ip": self.public_ip
         }

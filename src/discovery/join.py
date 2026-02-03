@@ -1,3 +1,4 @@
+from ast import literal_eval
 from .base import DiscoveryBase
 import socket
 import threading
@@ -11,73 +12,100 @@ class DiscoveryJoin(DiscoveryBase):
         self.bootstrap_port = bootstrap_port
         self.running = True
 
+    def stopAccept(self):
+        self.running = False
+        self.socket.shutdown(socket.SHUT_RDWR)
+        self.socket.close()
+
     def startAccept(self):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         print(f"Binding to port {self.bootstrap_port} for accepting JOIN connections...")
-        sock.bind(("", self.bootstrap_port))
+        self.socket.bind(("", self.bootstrap_port))
         
-        sock.listen(5)
+        self.socket.listen()
         while self.running:
             print(f"Listening on bootstrap port {self.bootstrap_port} for JOIN connections...")
-            client, addr = sock.accept() 
+            try:
+                client, addr = self.socket.accept() 
+            except Exception:
+                print("Socket closed, stopping accept loop.")
+                return
             print(f"[+] Accepted connection from: {addr[0]}:{addr[1]}")
             
             client_handler = threading.Thread(target=self.handle_client, args=(client,))
             client_handler.start() 
 
-            self.running = False  # Accept only one connection for JOIN
+        self.socket.close()
 
-        sock.close()
+
+    def get_error_msg(self, status):
+        return {
+            "type": "ERROR",
+            "status": status
+        }
+    
+    def parse_request_msg(self, msg_str):
+        msg = literal_eval(msg_str)
+        type = msg["type"]
+        status = msg["status"]
+        content = msg["content"]
+
+        # check keys
+        required_keys = {"ip", "public_key", "public_ip", "port"}
+        if not required_keys.issubset(content.keys()):
+            raise ValueError("Missing required keys in JOIN content")
+        return type, status, content
+
 
     def handle_client(self, client):
         request = client.recv(1024)
         print(f"[*] Received: {request.decode('utf-8')}")
 
-        dict_msg = eval(request.decode('utf-8'))
+        type, status, content = self.parse_request_msg(request.decode('utf-8'))
 
-        msg = {}
+        response = {}
 
-        if dict_msg["content"]['ip'] in self.state.peers or dict_msg["content"]['ip'] == self.state.ip:
-            print(f"Peer with IP {dict_msg['content']['ip']} already exists. Skipping addition.")
-            msg = {
-                "type": "ERROR",
-                "status": "exists"
-            }
+        if type != "JOIN":
+            print(f"Invalid discovery type: {type}. Expected 'JOIN'.")
+            response = self.get_error_msg("invalid_type")
+        elif content['ip'] in self.state.peers or content['ip'] == self.state.ip:
+            print(f"Peer with IP {content['ip']} already exists. Skipping addition.")
+            response = self.get_error_msg("exists")
             
-        elif dict_msg["type"] != "JOIN":
-            print(f"Invalid discovery type: {dict_msg['type']}. Expected 'JOIN'.")
-            msg = {
-                "type": "ERROR",
-                "status": "invalid_type"
-            }
         else:
-            print(f"Adding new peer with IP {dict_msg['content']['ip']}:{dict_msg['content']['port']}")
+            
+            print(f"Adding new peer with IP {content['ip']}:{content['port']}")
             self.state.add_peer(
-                dict_msg["content"]["ip"],
-                dict_msg["content"]["public_key"],
-                dict_msg["content"]["public_ip"],
-                dict_msg["content"]["port"]
+                content["ip"],
+                content["public_key"],
+                content["public_ip"],
+                content["port"]
             )
-            msg = {
+            response = {
                 "type": "JOIN",
                 "status": "success",
                 "content": self.state.interface_json(),
                 "sync": self.sync.getInfo() 
             }
 
-            
             self.sync.publishChange(
-                dict_msg["content"]['ip'],
-                dict_msg["content"]['public_key'],
-                dict_msg["content"]['public_ip'],
-                dict_msg["content"]['port']
+                content['ip'],
+                content['public_key'],
+                content['public_ip'],
+                content['port']
             )
             self.state.reload_config()
             
-            
-
-        client.send(str(msg).encode('utf-8'))
+        client.send(str(response).encode('utf-8'))
         client.close()
+
+    def parse_response_msg(self, msg_str):
+        msg = literal_eval(msg_str)
+        type = msg["type"]
+        status = msg["status"]
+        content = msg["content"]
+        sync = msg["sync"]
+        return type, status, content, sync
 
     def startJoin(self, bootstrap_node: str) -> dict:
         print(f"Joining the network via bootstrap node: {bootstrap_node}")
@@ -92,19 +120,19 @@ class DiscoveryJoin(DiscoveryBase):
             sock.send(str(msg).encode('utf-8'))
             response = sock.recv(4096)
             print(f"[*] Received: {response.decode('utf-8')}")
-            dict_msg = eval(response.decode('utf-8'))
-            if dict_msg["type"] == "ERROR":
-                print(f"Error during JOIN: {dict_msg['status']}")
+            type, status, content, sync = self.parse_response_msg(response.decode('utf-8'))
+            if type == "ERROR":
+                print(f"Error during JOIN: {status}")
             else:
                 print("JOIN successful.")
 
             self.state.add_peer(
-                dict_msg["content"]["ip"],
-                dict_msg["content"]["public_key"],
-                dict_msg["content"]["public_ip"],
-                dict_msg["content"]["port"]
+                content["ip"],
+                content["public_key"],
+                content["public_ip"],
+                content ["port"]
             )
 
-            return dict_msg["sync"]
+            return sync
 
             

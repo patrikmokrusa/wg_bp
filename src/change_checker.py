@@ -17,9 +17,9 @@ class ChangeChecker:
     def run(self):
         
         while self.running:
-            time.sleep(self.interval)
             # print("ChangeChecker: Checking for changes...")
             self.sync.checkForChanges()
+            time.sleep(self.interval)
 
             # TODO: detect public ip changes
 

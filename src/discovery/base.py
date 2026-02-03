@@ -4,6 +4,10 @@ from state import State
 class DiscoveryBase(abc.ABC):
 
     @abc.abstractmethod
+    def stopAccept(self):
+        pass
+
+    @abc.abstractmethod
     def startAccept(self):
         pass
 
