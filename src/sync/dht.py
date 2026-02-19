@@ -42,7 +42,6 @@ class SyncDHT(SyncBase):
             "sync-port": self.port
         }
         return info
-        
 
     def publishChange(self, virtual_ip, public_key, endpoint_ip, endpoint_port):
         print("Publishing changes to DHT...")
@@ -62,7 +61,6 @@ class SyncDHT(SyncBase):
 
     def checkForChanges(self):
         current_value = self.dht[CHANGE_CHECK_KEY]
-        # print(f"TEST:   val from {self.CurrentChangeCheckValue} to {current_value}")
         if current_value != self.CurrentChangeCheckValue:
             if self.CurrentChangeCheckValue != -1:
                 print(f"Detected changes in DHT... value changed from {self.CurrentChangeCheckValue} to {current_value}")
@@ -125,26 +123,6 @@ class SyncDHT(SyncBase):
         if change_happened:
             self.state.reload_config()
 
-    def check_individual_peer_change(self, peer_info, existing_peer):
-        if (peer_info["public_key"] != existing_peer["public_key"] or
-                peer_info["endpoint_ip"] != existing_peer["endpoint_ip"] or
-                peer_info["endpoint_port"] != existing_peer["endpoint_port"]):
-                self.state.remove_peer(peer_info["virtual_ip"])
-                self.state.add_peer(
-                    peer_info["virtual_ip"],
-                    peer_info["public_key"],
-                    peer_info["endpoint_ip"],
-                    peer_info["endpoint_port"]
-                )
-                print(f"""
-                      Updated from DHT:
-                      Before:
-                      {peer_info['virtual_ip']} -> {existing_peer}
-                      After:
-                      {peer_info['virtual_ip']} -> {peer_info}
-                      """)
-                return True
-        return False
 
     def exitSync(self):
         print("Exiting DHT synchronization...")
@@ -154,3 +132,6 @@ class SyncDHT(SyncBase):
         self.dht[CHANGE_CHECK_KEY] = self.dht[CHANGE_CHECK_KEY] + 1
 
         time.sleep(1)  # give time to write the value
+    
+    def listenForChanges(self):
+        return 
