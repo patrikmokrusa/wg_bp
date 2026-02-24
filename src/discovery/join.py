@@ -116,6 +116,7 @@ class DiscoveryJoin(DiscoveryBase):
                 "type": "JOIN",
                 "status": "request",
                 "content": self.state.interface_json()
+                
             }
             sock.send(str(msg).encode('utf-8'))
             response = sock.recv(4096)

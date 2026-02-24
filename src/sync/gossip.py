@@ -1,16 +1,13 @@
 from ast import literal_eval
 import asyncio
 import threading
+import json
+import random
 
 from state import State
 from .base import SyncBase
 
-from libp2p import new_host
-from libp2p.pubsub import gossipsub
-from libp2p.peer.peerinfo import info_from_p2p_addr
-from multiaddr import Multiaddr
-
-TOPIC = "GossipSyncTopic"
+STATE_UPDATE = "STATE_UPDATE"
 
 MSG_ADD_PEER = "ADD_PEER"
 MSG_UPDATE_PEER = "UPDATE_PEER"
@@ -20,30 +17,115 @@ MSG_REMOVE_PEER = "REMOVE_PEER"
 class SyncGossip(SyncBase):
     def __init__(self, injected_state : State, seed_node=None, port=6888):
         print("Initializing Gossip synchronization...")
+        self.interval = 5
+        self.state = injected_state
+        self.port = port
+        self.seed_node = seed_node
+
+        self.sendUpdates = True
+        self.shutdown_event = None  # Will be created in async context
+        self.gossip_task = None
+        self.version = 0
+        self.peers = {}
+        self.peers[self.state.ip] = {
+            "virtual_ip": self.state.ip,
+            "public_key": self.state.public_key,
+            "endpoint_ip": self.state.public_ip,
+            "endpoint_port": self.state.public_port,
+            "sync_port": self.port
+        }
+
+        if self.seed_node:
+            print(f"Bootstrapping to seed node at {self.seed_node}...")
+            self.peers[self.seed_node["virtual_ip"]] = self.seed_node
+
+        # Create event loop in separate thread
         self.loop = asyncio.new_event_loop()
         self.loop_thread = threading.Thread(target=self._run_loop, daemon=True)
         self.loop_thread.start()
-
-        self.state = injected_state
-        self.seed_node = seed_node
-        self.port = port
-
-        self.listenForChangesRunning = False
-        self.sub = None
-
-        self.host = new_host(listen_addrs=[Multiaddr(f"/ip4/{self.state.ip}/tcp/{self.port}")])
-        gossip = gossipsub.GossipSub(["/meshsub/1.1.0"], 
-                                     degree=8, degree_low=6, degree_high=12)
-        self.pubsub = gossipsub.Pubsub(self.host, gossip)
-        print(f"[*] Gossip host created on: {self.state.ip}:{self.port}")
-
-        if seed_node:
-            seed_info = info_from_p2p_addr(Multiaddr(seed_node))
-            self.createTask(self.host.connect(seed_info)).result()
-            print(f"[*] Connected to seed node: {seed_node}")
         
-        self.createTask(self._listen_for_changes())
+        # Start async initialization in the event loop
+        self.createTask(self._async_init())
+    
+    async def _async_init(self):
+        self.shutdown_event = asyncio.Event()
+        self.server = await asyncio.start_server(self._handleGossip, self.state.ip, self.port)
+        print(f"[*] Gossip server listening on {self.state.ip}:{self.port}")
+        
+        # Start gossip heartbeat
+        self.gossip_task = asyncio.create_task(self._sendGossip())
 
+
+    async def _handleGossip(self, reader, writer):
+        msg = json.loads((await reader.readline()).decode())
+        # print(f"[*] Received Gossip message")
+        from_ip, from_port = msg["from"].split(":")
+
+        if msg["version"] == 0:
+            # onboarding
+            new_peer = msg["state"][from_ip]
+            self.peers[new_peer["virtual_ip"]] = new_peer
+            print(f"[*] Onboarded new peer via Gossip: {new_peer['virtual_ip']}")
+            await self._sendStateToPeer(from_ip, from_port)
+        elif msg["version"] < self.version:
+            # update the other peer to our version and send them our state
+            await self._sendStateToPeer(from_ip, from_port)
+            return
+        elif msg["version"] == self.version:
+            return
+        else:
+            print(f"[*] Received state update from peer {from_ip}:{from_port} via Gossip...")
+            self.version = msg["version"]
+            self.peers = msg["state"]
+            self.checkForChanges()
+
+    async def _sendGossip(self):
+        while True:
+            known_peers = self.peers.keys()
+            if len(known_peers) == 1:
+                try:
+                    await asyncio.wait_for(self.shutdown_event.wait(), timeout=self.interval)
+                    break
+                except asyncio.TimeoutError:
+                    continue
+            
+            while True:
+                random_peer_ip = random.choice(list(known_peers))
+                if random_peer_ip == self.state.ip:
+                    continue
+                else:
+                    break
+            try:
+                await self._sendStateToPeer(random_peer_ip, self.peers[random_peer_ip]["sync_port"])
+            except Exception as e:
+                print(f"[!] Error sending gossip to peer {random_peer_ip}: {e}")
+            
+            # Wait for interval or shutdown event
+            try:
+                await asyncio.wait_for(self.shutdown_event.wait(), timeout=self.interval)
+                break 
+            except asyncio.TimeoutError:
+                pass  # Timeout, continue gossip
+
+    async def _sendStateToPeer(self, peer_ip, peer_port):
+        # print(f"[*] Sending state update to peer {peer_ip}:{peer_port} via Gossip...")
+        if peer_port is None:
+            print(f"Peer {peer_ip} not onboarded yet, cannot send state.")
+            return
+
+        reader, writer = await asyncio.open_connection(peer_ip, peer_port)
+        msg = {
+            "type": STATE_UPDATE,
+            "version": self.version,
+            "from": f"{self.state.ip}:{self.port}",
+            "state": self.peers
+        }
+        writer.write((json.dumps(msg) + "\n").encode())
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+
+            
     def initSync(self):
         print("Initializing Gossip synchronization...")
 
@@ -52,106 +134,120 @@ class SyncGossip(SyncBase):
             "sync-type": "Gossip",
             "sync-ip": self.state.ip,
             "sync-port": self.port,
-            "sync-id": str(self.host.get_id())
+            "sync-seed": self.peers[self.state.ip]
         }
         return info
 
+    
+
     def publishChange(self, virtual_ip, public_key, endpoint_ip, endpoint_port):
         print("Publishing changes to Gossip network...")
+        self.version += 1
         msg = {
-            "type": MSG_ADD_PEER,
+            "type": STATE_UPDATE,
+            "version": self.version,
             "virtual_ip": virtual_ip,
             "public_key": public_key,
             "endpoint_ip": endpoint_ip,
-            "endpoint_port": endpoint_port
+            "endpoint_port": endpoint_port,
+            "sync_port": self.port
         }
-        self.createTask(self.pubsub.publish(TOPIC, str(msg).encode()))
+        self.peers[virtual_ip] = {
+            "virtual_ip": virtual_ip,
+            "public_key": public_key,
+            "endpoint_ip": endpoint_ip,
+            "endpoint_port": endpoint_port,
+            "sync_port": None
+        }
+
+        if virtual_ip == self.state.ip:
+            self.peers[virtual_ip]["sync_port"] = self.port
+
+        # Gossip will propagate this via _sendGossip
+        print(f"[*] Successfully published change: {msg}")
     
-    async def _listen_for_changes(self):
-        print("Listening for changes from Gossip network...")
-        self.listenForChangesRunning = True
-        self.sub = await self.pubsub.subscribe(TOPIC)
-        while self.listenForChangesRunning:
-            msg = await self.sub.get()
-            print(f"Received message from {msg.from_id}: {msg.data.decode()}")
-            if msg.from_id == self.host.get_id():
-                continue
-            try:
-                data = literal_eval(msg.data.decode())
-                print(f"Received message from {msg.from_id}: {data}")
-                if data["type"] == MSG_ADD_PEER:
-                    self.state.add_peer(
-                        data["virtual_ip"],
-                        data["public_key"],
-                        data["endpoint_ip"],
-                        data["endpoint_port"]
-                    )
-                    print(f"Added peer from Gossip: {data['virtual_ip']} -> {data}")
-                elif data["type"] == MSG_REMOVE_PEER:
-                    self.state.remove_peer(data["virtual_ip"])
-                    print(f"Removed peer from Gossip: {data['virtual_ip']}")
-                elif data["type"] == MSG_UPDATE_PEER:
-                    existing_peer = self.state.peers.get(data["virtual_ip"])
-                    if existing_peer:
-                        result = self.check_individual_peer_change(data, existing_peer)
-                        if result:
-                            self.state.remove_peer(data["virtual_ip"])
-                            self.state.add_peer(
-                                data["virtual_ip"],
-                                data["public_key"],
-                                data["endpoint_ip"],
-                                data["endpoint_port"]
-                            )
-                            print(f"Updated peer from Gossip: {data['virtual_ip']} -> {data}")
-            except Exception as e:
-                print(f"Error processing message: {e}")
 
     def listenForChanges(self):
         # Now handled internally by _listen_for_changes during __init__
         pass
 
+    async def _sendLastGossip(self):
+        # Send ourselves still in state, but set flag so others know we're leaving
+        self.version += 1
+        del self.peers[self.state.ip]
+
+        if len(self.peers) > 0:
+            random_peer_ip = random.choice(list(self.peers.keys()))
+        
+            try:
+                await self._sendStateToPeer(
+                    random_peer_ip, 
+                    self.peers[random_peer_ip]["sync_port"]
+                )
+                print("[*] Departure message sent")
+            except Exception as e:
+                print(f"[!] Error sending departure: {e}")
+
     def exitSync(self):
         print("Exiting Gossip synchronization...")
+        self.sendUpdates = False
         
-        msg = {
-            "type": MSG_REMOVE_PEER,
-            "virtual_ip": self.state.ip,
-            "public_key": self.state.public_key,
-            "endpoint_ip": self.state.public_ip,
-            "endpoint_port": self.state.public_port
-        }
+        # Signal shutdown to wake up the gossip task
+        if self.shutdown_event:
+            self.loop.call_soon_threadsafe(self.shutdown_event.set)
         
+        # Send final state
         try:
-            # Publish exit message
-            self.createTask(self.pubsub.publish(TOPIC, str(msg).encode())).result(timeout=5)
-            print("[*] Exit message published, waiting for propagation...")
-            
-            # Give network time to propagate the message to other peers
-            threading.Event().wait(timeout=3)
-            
-            # Now stop listening
-            self.listenForChangesRunning = False
-            
-            # Unsubscribe
-            if self.sub:
-                self.createTask(self.pubsub.unsubscribe(self.sub)).result(timeout=5)
-            
-            # Close the host
-            self.createTask(self.host.close()).result(timeout=5)
-        except Exception as e:
-            print(f"Error during exit: {e}")
-        finally:
-            self.loop.call_soon_threadsafe(self.loop.stop)
-            self.loop_thread.join(timeout=1)
-
+            future = self.createTask(self._sendLastGossip())
+            future.result(timeout=1)
+        except:
+            pass
+        
+        # Close server
+        if self.server:
+            self.server.close()
+        
+        # Wait for gossip task to finish
+        if self.gossip_task:
+            try:
+                self.createTask(asyncio.sleep(1)).result(timeout=2)
+                self.gossip_task.result()
+            except:
+                pass
+        
+        # Stop loop cleanly
+        self.loop.call_soon_threadsafe(self.loop.stop)
+        self.loop_thread.join(timeout=2)
+    
     def createTask(self, awaitable):
+        """Create a task in the event loop"""
         return asyncio.run_coroutine_threadsafe(awaitable, self.loop)
-
+    
     def _run_loop(self):
+        """Run the event loop"""
         asyncio.set_event_loop(self.loop)
         self.loop.run_forever()
 
-
     def checkForChanges(self):
-        return 
+        for peer_ip, peer_info in self.peers.items():
+            existing_peer = self.state.peers.get(peer_ip)
+            if not existing_peer:
+                self.state.add_peer(
+                    peer_info["virtual_ip"],
+                    peer_info["public_key"],
+                    peer_info["endpoint_ip"],
+                    peer_info["endpoint_port"]
+                )
+                print(f"Added new peer via Gossip: {peer_ip} -> {peer_info}\n")
+                print(self.state.get_config())
+            else:
+                self.check_individual_peer_change(peer_info, existing_peer) 
+
+        # check for deleted peers - make a copy to avoid dict size change during iteration
+        existing_peers_copy = list(self.state.peers.items())
+        for existing_peer_ip, existing_peer_info in existing_peers_copy:
+            if existing_peer_ip not in self.peers.keys():
+                self.state.remove_peer(existing_peer_ip)
+                print(f"Removed peer via Gossip: {existing_peer_ip} -> {existing_peer_info}\n")
+                print(self.state.get_config())
         

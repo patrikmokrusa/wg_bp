@@ -40,8 +40,7 @@ def join_direct(args):
     if sync_info["sync-type"] == "DHT":
         sync = SyncDHT(state, seed_node=[(sync_info["sync-ip"], sync_info["sync-port"])], port=args.sync_port)
     elif sync_info["sync-type"] == "Gossip":
-        seed_node = f"/ip4/{sync_info['sync-ip']}/tcp/{sync_info['sync-port']}/p2p/{sync_info['sync-id']}"
-        sync = SyncGossip(state, seed_node=seed_node, port=args.sync_port)
+        sync = SyncGossip(state, seed_node=sync_info["sync-seed"], port=args.sync_port)
         
     return state, sync, args.run
 
@@ -81,7 +80,7 @@ def main():
         state, sync, run_flag = create(args)
     
     disc = None
-    print(sync.getInfo())
+    # print(sync.getInfo())
 
     change_checker = ChangeChecker(state, sync, interval=args.change_check_interval)
     change_checker.beginWork()
