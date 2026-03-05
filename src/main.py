@@ -6,6 +6,8 @@ from sync.dht import SyncDHT
 from sync.gossip import SyncGossip
 import argparse
 
+from sync.mq import MessageQueueSync
+
 parser = argparse.ArgumentParser()
 subparsers = parser.add_subparsers(required=True)
 
@@ -28,7 +30,7 @@ def join_direct(args):
 
     dis = DiscoveryJoin(state, None, bootstrap_port=args.bootstrap_port)
     try:
-        sync_info = dis.startJoin(args.target_host)
+        sync_info = dis.startJoin(args.target_host, sync_port=args.sync_port)
     except Exception as e:
         print(f"Error during JOIN: {e}")
         exit(1)
@@ -41,6 +43,8 @@ def join_direct(args):
         sync = SyncDHT(state, seed_node=[(sync_info["sync-ip"], sync_info["sync-port"])], port=args.sync_port)
     elif sync_info["sync-type"] == "Gossip":
         sync = SyncGossip(state, seed_node=sync_info["sync-seed"], port=args.sync_port)
+    elif sync_info["sync-type"] == "MQ":
+        sync = MessageQueueSync(state, seed_node=sync_info["sync-seed"], port=args.sync_port)
         
     return state, sync, args.run
 
@@ -57,9 +61,11 @@ def create(args):
     
     sync = None
     if args.sync == "DHT":
-        sync = SyncDHT(state, port=args.sync_port)
+        sync = SyncDHT(state, port=args.sync_port, interval=args.change_check_interval)
     elif args.sync == "Gossip":
         sync = SyncGossip(state, port=args.sync_port)
+    elif args.sync == "MQ":
+        sync = MessageQueueSync(state, seed_node=None, port=args.sync_port, interval=args.change_check_interval)
     else:
         print("Unsupported synchronization method specified.")
         exit(1)
@@ -80,10 +86,6 @@ def main():
         state, sync, run_flag = create(args)
     
     disc = None
-    # print(sync.getInfo())
-
-    change_checker = ChangeChecker(state, sync, interval=args.change_check_interval)
-    change_checker.beginWork()
 
     help_msg = """Available commands:
 - exit : Exit the program
@@ -97,7 +99,6 @@ def main():
     while run_flag:
         input_val = input()
         if input_val == "exit": # exit or ctrl + c
-            change_checker.running = False
             if disc is not None and (disc is not None and disc.running):
                 disc.stopAccept()
             sync.exitSync()
@@ -117,13 +118,18 @@ def main():
             print(sync.getInfo())
             
         elif input_val == "force-check":
-            change_checker.forceCheck()
-            
+            sync.checkForChanges()
+            pass
+
         elif input_val == "discover-join":
-            if disc is not None or (disc is not None and disc.running):
-                print("Stopping previous discovery join...")
-                disc.stopAccept()
-                disc = None
+            try:
+                if disc is not None or (disc is not None and disc.running):
+                    print("Stopping previous discovery join...")
+                    disc.stopAccept()
+                    disc = None
+                    continue
+            except Exception as e:
+                print(f"Failed to start join: {e}")
                 continue
 
             port = input("Enter port for discovery join (default 17777): ")
@@ -140,7 +146,6 @@ def main():
                 print(f"Error in discovery join: {e}")
 
     
-    change_checker.running = False
 
     
 if __name__ == "__main__":

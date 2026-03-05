@@ -1,16 +1,20 @@
 
+import threading
 import time
 from kad import DHT
 from .base import SyncBase
+import asyncio
 
 CHANGE_CHECK_KEY = "CHANGE_CHECK"
 KEY_LIST_KEY = "KEY_LIST"
 
 class SyncDHT(SyncBase):
-    def __init__(self, injected_state, seed_node=None, port=6881):
+    def __init__(self, injected_state, seed_node=None, port=6881, interval=5):
         self.state = injected_state
         self.port = port
+        self.interval = interval
         self.CurrentChangeCheckValue = -1
+
         
         if seed_node:
             self.dht = DHT(self.state.ip, port, seeds=seed_node)
@@ -32,8 +36,32 @@ class SyncDHT(SyncBase):
                 "endpoint_port": self.state.public_port
             }
 
+        self.loop = asyncio.new_event_loop()
+        self.loop_thread = threading.Thread(target=self._run_loop, daemon=True)
+        self.loop_thread.start()
+
+        asyncio.run_coroutine_threadsafe(self._async_init(), self.loop)
+
+    def _run_loop(self):
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_forever()
+    
+    async def _async_init(self):
+        self.termination_event = asyncio.Event()
+        self.task = asyncio.create_task(self._check_for_changes_loop())
+
+    async def _check_for_changes_loop(self):
+        while True:
+            print("[*] Checking for changes in DHT...")
+            self.checkForChanges()
+            try:
+                await asyncio.wait_for(self.termination_event.wait(), timeout=self.interval)
+                break 
+            except asyncio.TimeoutError:
+                pass
+
     def initSync(self):
-        print("Initializing DHT synchronization...")
+        print("[DHT] Initializing DHT synchronization...")
 
     def getInfo(self):
         info = {
@@ -43,8 +71,8 @@ class SyncDHT(SyncBase):
         }
         return info
 
-    def publishChange(self, virtual_ip, public_key, endpoint_ip, endpoint_port):
-        print("Publishing changes to DHT...")
+    def publishChange(self, virtual_ip, public_key, endpoint_ip, endpoint_port, sync_port=None):
+        print("[DHT] Publishing changes to DHT...")
 
         self.dht[virtual_ip] = {
             "virtual_ip": virtual_ip,
@@ -63,7 +91,7 @@ class SyncDHT(SyncBase):
         current_value = self.dht[CHANGE_CHECK_KEY]
         if current_value != self.CurrentChangeCheckValue:
             if self.CurrentChangeCheckValue != -1:
-                print(f"Detected changes in DHT... value changed from {self.CurrentChangeCheckValue} to {current_value}")
+                print(f"[DHT] Detected changes in DHT... value changed from {self.CurrentChangeCheckValue} to {current_value}")
             self.fetchAndUpdateIter()
             self.CurrentChangeCheckValue = current_value
         
@@ -106,14 +134,14 @@ class SyncDHT(SyncBase):
                     peer_info["endpoint_ip"],
                     peer_info["endpoint_port"]
                 )
-                print(f"Added new peer from DHT: {peer_info['virtual_ip']} -> {peer_info}")
+                print(f"[DHT] Added new peer: {peer_info['virtual_ip']} -> {peer_info}")
                 change_happened = True
                 continue
             
             except TypeError:
                 # Peer has been removed from DHT
                 self.state.remove_peer(key)
-                print(f"Removed peer from DHT: {key} ")
+                print(f"[DHT] Removed peer from DHT: {key} ")
                 change_happened = True
                 continue
 
@@ -125,13 +153,15 @@ class SyncDHT(SyncBase):
 
 
     def exitSync(self):
-        print("Exiting DHT synchronization...")
+        print("[DHT] Exiting DHT synchronization...")
         
         self.dht[self.state.ip] = None
         
         self.dht[CHANGE_CHECK_KEY] = self.dht[CHANGE_CHECK_KEY] + 1
 
-        time.sleep(1)  # give time to write the value
-    
-    def listenForChanges(self):
-        return 
+        if self.termination_event:
+            self.loop.call_soon_threadsafe(self.termination_event.set)
+
+        
+
+        # time.sleep(1)  # give time to write the value

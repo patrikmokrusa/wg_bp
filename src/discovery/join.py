@@ -81,6 +81,9 @@ class DiscoveryJoin(DiscoveryBase):
                 content["public_ip"],
                 content["port"]
             )
+
+            self.state.reload_config()
+
             response = {
                 "type": "JOIN",
                 "status": "success",
@@ -92,9 +95,9 @@ class DiscoveryJoin(DiscoveryBase):
                 content['ip'],
                 content['public_key'],
                 content['public_ip'],
-                content['port']
+                content['port'],
+                content['sync_port']
             )
-            self.state.reload_config()
             
         client.send(str(response).encode('utf-8'))
         client.close()
@@ -107,16 +110,17 @@ class DiscoveryJoin(DiscoveryBase):
         sync = msg["sync"]
         return type, status, content, sync
 
-    def startJoin(self, bootstrap_node: str) -> dict:
+    def startJoin(self, bootstrap_node: str, sync_port: int = None) -> dict:
         print(f"Joining the network via bootstrap node: {bootstrap_node}")
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.connect((bootstrap_node, self.bootstrap_port))
+            content = self.state.interface_json()
+            content["sync_port"] = sync_port
             msg = {
                 "type": "JOIN",
                 "status": "request",
-                "content": self.state.interface_json()
-                
+                "content": content
             }
             sock.send(str(msg).encode('utf-8'))
             response = sock.recv(4096)
