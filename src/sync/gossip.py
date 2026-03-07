@@ -188,8 +188,7 @@ class SyncGossip(SyncBase):
         
         # Send final state
         try:
-            future = self.createTask(self._sendLastGossip())
-            future.result(timeout=1)
+            self.createTask(self._sendLastGossip()).result(timeout=1)
         except:
             pass
         

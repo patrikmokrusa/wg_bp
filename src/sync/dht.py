@@ -52,7 +52,7 @@ class SyncDHT(SyncBase):
 
     async def _check_for_changes_loop(self):
         while True:
-            print("[*] Checking for changes in DHT...")
+            # print("[*] Checking for changes in DHT...")
             self.checkForChanges()
             try:
                 await asyncio.wait_for(self.termination_event.wait(), timeout=self.interval)

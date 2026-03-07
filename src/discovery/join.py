@@ -3,10 +3,12 @@ from .base import DiscoveryBase
 import socket
 import threading
 from sync.dht import SyncDHT
+from sync.gossip import SyncGossip
+from sync.mq import MessageQueueSync
 from state import State
 
 class DiscoveryJoin(DiscoveryBase):
-    def __init__(self, injected_state: State, injected_sync: SyncDHT, bootstrap_port = 17777):
+    def __init__(self, injected_state: State, injected_sync: SyncDHT | SyncGossip | MessageQueueSync, bootstrap_port = 17777):
         self.state = injected_state
         self.sync = injected_sync
         self.bootstrap_port = bootstrap_port
