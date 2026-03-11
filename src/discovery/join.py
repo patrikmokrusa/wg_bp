@@ -14,6 +14,12 @@ class DiscoveryJoin(DiscoveryBase):
         self.bootstrap_port = bootstrap_port
         self.running = True
 
+    def getInfo(self):
+        return {
+            "type": "JOIN",
+            "port": self.bootstrap_port
+        }
+
     def stopAccept(self):
         self.running = False
         self.socket.shutdown(socket.SHUT_RDWR)

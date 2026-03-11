@@ -14,3 +14,8 @@ class DiscoveryBase(abc.ABC):
     @abc.abstractmethod
     def startJoin(self, bootstrap_node: str):
         pass
+
+    @abc.abstractmethod
+    def getInfo(self):
+        pass
+    

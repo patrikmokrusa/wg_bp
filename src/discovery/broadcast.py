@@ -19,6 +19,12 @@ class DiscoveryBroadcast:
         self.thread = None
         self.socket = None
 
+    def getInfo(self):
+        return {
+            "type": "BROADCAST",
+            "port": self.bootstrap_port
+        }
+
     def stopAccept(self):
         self.running = False
         self.socket.shutdown(socket.SHUT_RDWR)

@@ -1,7 +1,9 @@
 import threading
+import time
 from state import State
 from discovery.join import DiscoveryJoin
 from discovery.broadcast import DiscoveryBroadcast
+from discovery.dnssd import DiscoveryDNSSD
 from sync.dht import SyncDHT
 from sync.gossip import SyncGossip
 import argparse
@@ -76,6 +78,30 @@ def broadcast_discover(args):
         sync = MessageQueueSync(state, seed_node=sync_info["sync-seed"], port=args.sync_port)
         
     return state, sync, args.run
+
+dnssd_parser = subparsers.add_parser('dnssd', help='join using DNSSD discovery')
+add_common_args(dnssd_parser)
+dnssd_parser.set_defaults(func='dnssd_discover')
+
+def dnssd_discover(args):
+    state = State(args.ip, port=args.port, interface=args.interface)
+
+    dis = DiscoveryDNSSD(state)
+
+    info = dis.browseServices()
+    if info:
+        if info["type"] == "JOIN":
+            args.bootstrap_port = info["port"]
+            args.target_host = info["ip"]
+            state, sync, run_flag = join_direct(args)
+        elif info["type"] == "BROADCAST":
+            args.bootstrap_port = info["port"]
+            state, sync, run_flag = broadcast_discover(args)
+        else:
+            print("Unknown service type discovered via DNSSD.")
+            exit(1)
+
+    return state, sync, run_flag
     
 
 
@@ -116,25 +142,31 @@ def main():
         state, sync, run_flag = create(args)
     elif args.func == 'broadcast_discover':
         state, sync, run_flag = broadcast_discover(args)
+    elif args.func == 'dnssd_discover':
+        state, sync, run_flag = dnssd_discover(args)
     
-    disc = None
+    disc_join = None
+    disc_bcast = None
+    ad = None
 
     help_msg = """Available commands:
 - exit : Exit the program
 - return : Return to shell without stopping the network
 - discover-join : Start accepting discovery join requests
 - discover-broadcast : Start listening for broadcast requests
+- advertise : Advertise direct joinability using DNSSD
 - help : Show this help message
 - info : Show current state information
-- force-check : Force an immediate check for changes in the network
 """
     print(help_msg)
     while run_flag:
         input_val = input()
         if input_val == "exit": # exit or ctrl + c
-            if disc is not None and (disc is not None and disc.running):
+            if disc_join:
+                disc_join.stopAccept()
+            if disc_bcast:
                 try:
-                    disc.stopAccept()
+                    disc_bcast.stopAccept()
                 except OSError as e:
                     if e.errno != 107:  # Ignore "Transport endpoint is not connected"
                         print(f"Error occurred while stopping discovery: {e}")
@@ -142,6 +174,8 @@ def main():
                     print(f"Error occurred while stopping discovery: {e}")
             sync.exitSync()
             state.disable_config()
+            if ad:
+                ad.stopAdvertise()
             break
 
         if input_val == "return": # return to shell
@@ -149,6 +183,21 @@ def main():
             break
         elif input_val == "help":
             print(help_msg)
+
+        elif input_val == "advertise":
+            if ad:
+                print("Stopping previous advertisement...")
+                ad.stopAdvertise()
+                ad = None
+            else:
+                ad = DiscoveryDNSSD(state)
+
+                if disc_join:
+                    ad.startAdvertise(disc_join)
+                elif disc_bcast:
+                    ad.startAdvertise(disc_bcast)
+                else:
+                    print("Nothing to advertise.")
             
         elif input_val == "info":
             print(state.get_config())
@@ -162,10 +211,10 @@ def main():
 
         elif input_val == "discover-join":
             try:
-                if disc is not None or (disc is not None and disc.running):
+                if disc_join:
                     print("Stopping previous discovery join...")
-                    disc.stopAccept()
-                    disc = None
+                    disc_join.stopAccept()
+                    disc_join = None
                     continue
             except Exception as e:
                 print(f"Failed to start join: {e}")
@@ -176,9 +225,9 @@ def main():
                 port = 17777
             else:
                 port = int(port)
-            disc = DiscoveryJoin(state, sync, bootstrap_port=port)
+            disc_join = DiscoveryJoin(state, sync, bootstrap_port=port)
             try:
-                bootstrap_thread = threading.Thread(target=disc.startAccept)
+                bootstrap_thread = threading.Thread(target=disc_join.startAccept, daemon=True)
                 bootstrap_thread.start()
 
             except Exception as e:
@@ -186,10 +235,10 @@ def main():
 
         elif input_val == "discover-broadcast":
             try:
-                if disc is not None or (disc is not None and disc.running):
-                    print("Stopping previous discovery join...")
-                    disc.stopAccept()
-                    disc = None
+                if disc_bcast is not None or (disc_bcast is not None and disc_bcast.running):
+                    print("Stopping previous discovery broadcast...")
+                    disc_bcast.stopAccept()
+                    disc_bcast = None
                     continue
             except Exception as e:
                 print(f"Failed to start broadcast join: {e}")
@@ -200,9 +249,9 @@ def main():
                 port = 18888
             else:
                 port = int(port)
-            disc = DiscoveryBroadcast(state, sync, bootstrap_port=port)
+            disc_bcast = DiscoveryBroadcast(state, sync, bootstrap_port=port)
             try:
-                disc.startAccept()
+                disc_bcast.startAccept()
 
             except Exception as e:
                 print(f"Error in discovery broadcast: {e}")        

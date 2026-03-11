@@ -24,12 +24,12 @@ class State:
 
     def update_public_ip(self):
     
-        print("Determining public IP and port via STUN...")
+        print("[STATE] Determining public IP and port via STUN...")
         mapped_addr = stun.get_ip_info('0.0.0.0', self.port, stun_host='stun1.l.google.com')
-        print(f"STUN result: {mapped_addr}")
+        print(f"[STATE] STUN result: {mapped_addr}")
         if mapped_addr[1] is None or mapped_addr[2] is None:
-            print("Failed to get public IP via STUN.")
-            print("Falling back to HTTP request method...")
+            print("[STATE] Failed to get public IP via STUN.")
+            print("[STATE] Falling back to HTTP request method...")
             self.update_public_ip_request()
             return
         
