@@ -43,30 +43,31 @@ class MessageQueueSync(SyncBase):
             self.sub.connect(f"tcp://{seed_node['virtual_ip']}:{seed_node['sync_port']}")
             print(f"[MQ] SUB connecting to tcp://{seed_node['virtual_ip']}:{seed_node['sync_port']}")
 
+        self.ready_event = asyncio.Event()
         self.loop = asyncio.new_event_loop()
         self.loop_thread = threading.Thread(target=self._run_loop, daemon=True)
         self.loop_thread.start()
-        self.createTask(self._async_init())
+        self.createTask(self._async_init(seed_node=seed_node))
+
+    async def _async_init(self, seed_node = None):
+        self.terminate_event = asyncio.Event()
+        self.listen_task = asyncio.create_task(self._listenForUpdates())
 
         if seed_node:
             print("[MQ] Waiting for initial state synchronization from seed node...")
             while self.version == 0:
-                time.sleep(1) 
                 self.publishOnboard()
-
-    async def _async_init(self):
-        self.terminate_event = asyncio.Event()
-        self.listen_task = asyncio.create_task(self._listenForUpdates())
-        
+                try:
+                    await asyncio.wait_for(self.ready_event.wait(), timeout=1)
+                    break
+                except asyncio.TimeoutError:
+                    pass
 
     async def _listenForUpdates(self):
-        cnt = 0
         while not self.terminate_event.is_set():
             try:
                 msg = self.sub.recv_string(flags=zmq.NOBLOCK)
                 data = json.loads(msg)
-                cnt += 1
-                # print(f"[*] num:{cnt} Received message: {data['type']} from {data['from']}")
                 if data["from"] == f"{self.state.ip}:{self.port}":
                     print("[MQ] Ignoring message from self")
                     continue
@@ -75,6 +76,10 @@ class MessageQueueSync(SyncBase):
                 if data["type"] == STATE_UPDATE:
                     if data["version"] > self.version:
                         print(f"[MQ] Received {data['type']} from peer {data['from']} via Message Queue...")
+                        if self.version == 0:
+                            print("[MQ] Initial state synchronization complete.")
+                            self.ready_event.set()
+
                         self.version = data["version"]
                         self.peers = data["state"]
                     elif data["version"] < self.version:
@@ -82,7 +87,6 @@ class MessageQueueSync(SyncBase):
                         self.publishState()
                     else:
                         print(f"[MQ] Received {data['type']} with same version from peer {data['from']} via Message Queue... no action needed")
-                        # same version, no action needed
                         continue
                 
                 elif data["type"] == DEPARTURE_NOTICE:
@@ -96,8 +100,6 @@ class MessageQueueSync(SyncBase):
                 self.checkForChanges()
             except zmq.Again:
                 await asyncio.sleep(self.interval)
-            # except Exception as e:
-            #     raise e
 
     def publishChange(self, virtual_ip, public_key, endpoint_ip, endpoint_port, sync_port = None):
         self.peers[virtual_ip] = {
@@ -121,7 +123,6 @@ class MessageQueueSync(SyncBase):
         self.pub.send_string(json.dumps(msg))
 
     def publishState(self):
-        # self.version += 1
         msg = {
             "type": STATE_UPDATE,
             "from": f"{self.state.ip}:{self.port}",
@@ -169,17 +170,14 @@ class MessageQueueSync(SyncBase):
                 print(self.state.get_config())
                 reload_required = True
             else:
-                print(f"[MQ] Checking peer for changes...")
                 if self.check_individual_peer_change(peer_info, existing_peer):
-                    print(f"Detected change in peer")
+                    print(f"[MQ] Detected change in peer {peer_ip}")
                     reload_required = True
 
         existing_peers_copy = list(self.state.peers.items())
-        # print(f"[CHCK] existing_peers_copy: {existing_peers_copy}")
         for existing_peer_ip, existing_peer_info in existing_peers_copy:
             if existing_peer_ip not in self.peers.keys():
                 self.state.remove_peer(existing_peer_ip)
-                # self.sub.disconnect(f"tcp://{existing_peer_info['virtual_ip']}:{existing_peer_info['sync_port']}")
                 print(f"[MQ] Removed peer via MQ: {existing_peer_ip} -> {existing_peer_info}\n")
                 reload_required = True
 

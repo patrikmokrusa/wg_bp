@@ -1,6 +1,9 @@
 import subprocess
 import urllib
 import stun
+from pythonping import ping
+
+STUN_SERVER = 'stun1.l.google.com'
 
 class State:
     def __init__(self, ip: str, port: int = 51820, interface="wg0", keepalive=25):
@@ -18,14 +21,14 @@ class State:
         self.public_port = None
         self.update_public_ip()
 
-    def update_public_ip_request(self):
+    def update_public_ip_request(self)-> None:
         external_ip = urllib.request.urlopen('https://api.ipify.org').read().decode('utf8')
         self.public_ip = external_ip
 
     def update_public_ip(self):
     
         print("[STATE] Determining public IP and port via STUN...")
-        mapped_addr = stun.get_ip_info('0.0.0.0', self.port, stun_host='stun1.l.google.com')
+        mapped_addr = stun.get_ip_info('0.0.0.0', self.port, stun_host=STUN_SERVER)
         print(f"[STATE] STUN result: {mapped_addr}")
         if mapped_addr[1] is None or mapped_addr[2] is None:
             print("[STATE] Failed to get public IP via STUN.")
@@ -37,11 +40,11 @@ class State:
         self.public_ip = mapped_addr[1]
         self.public_port = mapped_addr[2]
 
-    def __gen_private_key(self):
+    def __gen_private_key(self)-> None:
         cli = subprocess.Popen(["wg", "genkey"], stdout=subprocess.PIPE)
         self.private_key = cli.stdout.read().decode("utf-8")
     
-    def __gen_public_key(self):
+    def __gen_public_key(self)-> None:
         cli = subprocess.Popen(["wg", "pubkey"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         self.public_key = cli.communicate(input=self.private_key.encode("utf-8"))[0].decode("utf-8")
 
@@ -54,7 +57,7 @@ class State:
         if peer_virtual_ip in self.peers:
             del self.peers[peer_virtual_ip]
 
-    def get_config(self):
+    def get_config(self)-> str:
         config = ""
         config += "[Interface]\n"
         config += f"PrivateKey = {self.private_key}"
@@ -69,25 +72,30 @@ class State:
         
         return config
 
-    def write_config(self):
+    def write_config(self)-> None:
         filename = f"/etc/wireguard/{self.interface}.conf"
         with open(filename  , "w") as f:
             f.write(self.get_config())
 
-    def load_config(self):
+    def load_config(self)-> None:
         print(self.get_config())
         subprocess.run(["wg-quick", "up", self.interface])
+        self.ping_all_peers()
 
-    def disable_config(self):
+    def ping_all_peers(self)-> None:
+        for peer_ip in self.peers.keys():
+            ping(peer_ip, verbose=False, count=10, timeout=0)
+
+    def disable_config(self)-> None:
         subprocess.run(["wg-quick", "down", self.interface])
 
-    def reload_config(self):
+    def reload_config(self)-> None:
         #TODO: use wg strip
         self.disable_config()
         self.write_config()
         self.load_config()
 
-    def interface_json(self):
+    def interface_json(self)-> dict:
         return {
             "ip": self.ip,
             "port": self.public_port,

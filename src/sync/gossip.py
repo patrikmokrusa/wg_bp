@@ -103,7 +103,6 @@ class SyncGossip(SyncBase):
                 pass  # Timeout, continue gossip
 
     async def _sendStateToPeer(self, peer_ip, peer_port):
-        # print(f"[*] Sending state update to peer {peer_ip}:{peer_port} via Gossip...")
         if peer_port is None:
             print(f"Peer {peer_ip} not onboarded yet, cannot send state.")
             return

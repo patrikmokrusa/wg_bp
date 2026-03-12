@@ -3,3 +3,4 @@ aiostun
 libp2p
 pyzmq
 zeroconf
+pythonping

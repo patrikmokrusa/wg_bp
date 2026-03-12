@@ -194,10 +194,11 @@ def main():
 
                 if disc_join:
                     ad.startAdvertise(disc_join)
-                elif disc_bcast:
+                if disc_bcast:
                     ad.startAdvertise(disc_bcast)
-                else:
+                if not disc_join and not disc_bcast:
                     print("Nothing to advertise.")
+                    ad = None
             
         elif input_val == "info":
             print(state.get_config())

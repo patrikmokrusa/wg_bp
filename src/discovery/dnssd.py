@@ -17,7 +17,7 @@ class DiscoveryDNSSD():
         self.zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
         self.join_service_info = None
         self.broadcast_service_info = None
-        self.available_services = {}
+        self.available_services = []
 
     def startAdvertise(self, discovery_instance) -> None:
         print("[DNSSD] Starting DNSSD discovery...")
@@ -83,10 +83,17 @@ class DiscoveryDNSSD():
         ]
         self.browser = ServiceBrowser(self.zeroconf, services, handlers=[self.on_service_state_change])
         while True:
-            selected_service = input("Select a service to join:").strip()
-            if selected_service in self.available_services.keys():
-                info = self.available_services[selected_service]
-                print(f"Selected service {selected_service} with info:\n {info}\n")
+            selected_service = input("Select **index** of service to join:\n").strip()
+            if not selected_service.isdigit():
+                print("Please enter a valid index number.")
+                continue
+            selected_service = int(selected_service)
+            # if selected_service in self.available_services.keys():
+            if selected_service < len(self.available_services):
+                info = self.available_services[selected_service]["info"]
+                name = self.available_services[selected_service]["name"]
+                # info = self.available_services[selected_service]
+                print(f"[DNSSD] Selected service **{selected_service}** ({name}).")
                 self.zeroconf.close()
                 ret = {
                     "type" : info.properties.get(KEY_TYPE.encode()).decode('utf-8'),
@@ -103,16 +110,23 @@ class DiscoveryDNSSD():
         if state_change is ServiceStateChange.Added:
             info = zeroconf.get_service_info(service_type, name)
             if info:
-                print(f"[DNSSD] Resolved service {name}:\n {info}\n")
-                self.available_services[name] = info
+                # self.available_services[name] = info
+                self.available_services.append({"name": name, "info": info})
+                print(f"[DNSSD] **{self.available_services.index({'name': name, 'info': info})}** Resolved service {name}:\n {info}\n")
             else:
                 print(f"[DNSSD] Failed to resolve service {name}")
         elif state_change is ServiceStateChange.Removed:
             print(f"[DNSSD] Service {name} removed")
-            if name in self.available_services:
-                del self.available_services[name]
+            if info in self.available_services:
+                # del self.available_services[name]
+                self.available_services.remove(info)
         elif state_change is ServiceStateChange.Updated:
             info = zeroconf.get_service_info(service_type, name)
             if info:
-                print(f"[DNSSD] Service {name} updated:\n {info}\n")
-                self.available_services[name] = info
+                # self.available_services[name] = info
+                for idx, service in enumerate(self.available_services):
+                    if service["name"] == name:
+                        self.available_services[idx]["info"] = info
+                        break
+                
+                print(f"[DNSSD] **{self.available_services.index({'name': name, 'info': info})}** Service {name} updated:\n {info}\n")
