@@ -226,12 +226,7 @@ def main():
             else:
                 port = int(port)
             disc_join = DiscoveryJoin(state, sync, bootstrap_port=port)
-            try:
-                bootstrap_thread = threading.Thread(target=disc_join.startAccept, daemon=True)
-                bootstrap_thread.start()
-
-            except Exception as e:
-                print(f"Error in discovery join: {e}")
+            disc_join.startAccept()
 
         elif input_val == "discover-broadcast":
             try:

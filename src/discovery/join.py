@@ -26,19 +26,23 @@ class DiscoveryJoin(DiscoveryBase):
         self.socket.close()
 
     def startAccept(self):
+        self.thread = threading.Thread(target=self._acceptLoop, daemon=True)
+        self.thread.start()
+
+    def _acceptLoop(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        print(f"Binding to port {self.bootstrap_port} for accepting JOIN connections...")
+        print(f"[JOIN] Binding to port {self.bootstrap_port} for accepting JOIN connections...")
         self.socket.bind(("", self.bootstrap_port))
         
         self.socket.listen()
         while self.running:
-            print(f"Listening on bootstrap port {self.bootstrap_port} for JOIN connections...")
+            print(f"[JOIN] Listening on bootstrap port {self.bootstrap_port} for JOIN connections...")
             try:
                 client, addr = self.socket.accept() 
             except Exception:
-                print("Socket closed, stopping accept loop.")
+                print(f"[JOIN] Socket closed, stopping accept loop.")
                 return
-            print(f"[+] Accepted connection from: {addr[0]}:{addr[1]}")
+            print(f"[JOIN] Accepted connection from: {addr[0]}:{addr[1]}")
             
             client_handler = threading.Thread(target=self.handle_client, args=(client,))
             client_handler.start() 
@@ -67,22 +71,22 @@ class DiscoveryJoin(DiscoveryBase):
 
     def handle_client(self, client):
         request = client.recv(1024)
-        print(f"[*] Received: {request.decode('utf-8')}")
+        print(f"[JOIN] Received: {request.decode('utf-8')}")
 
         type, status, content = self.parse_request_msg(request.decode('utf-8'))
 
         response = {}
 
         if type != "JOIN":
-            print(f"Invalid discovery type: {type}. Expected 'JOIN'.")
+            print(f"[JOIN] Invalid discovery type: {type}. Expected 'JOIN'.")
             response = self.get_error_msg("invalid_type")
         elif content['ip'] in self.state.peers or content['ip'] == self.state.ip:
-            print(f"Peer with IP {content['ip']} already exists. Skipping addition.")
+            print(f"[JOIN] Peer with IP {content['ip']} already exists. Skipping addition.")
             response = self.get_error_msg("exists")
             
         else:
             
-            print(f"Adding new peer with IP {content['ip']}:{content['port']}")
+            print(f"[JOIN] Adding new peer with IP {content['ip']}:{content['port']}")
             self.state.add_peer(
                 content["ip"],
                 content["public_key"],
@@ -135,9 +139,9 @@ class DiscoveryJoin(DiscoveryBase):
             print(f"[*] Received: {response.decode('utf-8')}")
             type, status, content, sync = self.parse_response_msg(response.decode('utf-8'))
             if type == "ERROR":
-                print(f"Error during JOIN: {status}")
+                print(f"[JOIN] Error during JOIN: {status}")
             else:
-                print("JOIN successful.")
+                print(f"[JOIN] JOIN successful.")
 
             self.state.add_peer(
                 content["ip"],
