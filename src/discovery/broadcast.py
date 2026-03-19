@@ -46,12 +46,12 @@ class DiscoveryBroadcast:
                 return
             
             if self.running:
-                print(f"[BCAST] Received broadcast message from {addr[0]}:{addr[1]}")
+                # print(f"[BCAST] Received broadcast message from {addr[0]}:{addr[1]}")
                 self._handle_client(data, addr)
 
     def _handle_client(self, data, addr):
         request = json.loads(data.decode('utf-8'))
-        print(f"[BCAST] Received message: {request} from {addr[0]}:{addr[1]}")
+        # print(f"[BCAST] Received message: {request} from {addr[0]}:{addr[1]}")
         if request['type'] == JOIN_REQUEST:
             print(f"[BCAST] Received JOIN request from {addr[0]}:{addr[1]}")
             content = request['content']

@@ -60,7 +60,6 @@ def broadcast_discover(args):
 
     dis = DiscoveryBroadcast(state, bootstrap_port=args.bootstrap_port, injected_sync=None)
 
-    # sync_info = dis.startJoin()
     try:
         sync_info = dis.startJoin()
     except Exception as e:
@@ -174,6 +173,7 @@ def main():
                     print(f"Error occurred while stopping discovery: {e}")
             sync.exitSync()
             state.disable_config()
+            state.disableNetlink()
             if ad:
                 ad.stopAdvertise()
             break
