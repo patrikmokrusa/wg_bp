@@ -42,7 +42,7 @@ def join_direct(args):
     state.load_config()
 
     if sync_info["sync-type"] == "DHT":
-        sync = SyncDHT(state, seed_node=[(sync_info["sync-ip"], sync_info["sync-port"])], port=args.sync_port)
+        sync = SyncDHT(state, seed_node=(sync_info["sync-ip"], sync_info["sync-port"]), port=args.sync_port)
     elif sync_info["sync-type"] == "Gossip":
         sync = SyncGossip(state, seed_node=sync_info["sync-seed"], port=args.sync_port)
     elif sync_info["sync-type"] == "MQ":
@@ -70,7 +70,7 @@ def broadcast_discover(args):
     state.load_config()
 
     if sync_info["sync-type"] == "DHT":
-        sync = SyncDHT(state, seed_node=[(sync_info["sync-ip"], sync_info["sync-port"])], port=args.sync_port)
+        sync = SyncDHT(state, seed_node=(sync_info["sync-ip"], sync_info["sync-port"]), port=args.sync_port)
     elif sync_info["sync-type"] == "Gossip":
         sync = SyncGossip(state, seed_node=sync_info["sync-seed"], port=args.sync_port)
     elif sync_info["sync-type"] == "MQ":
