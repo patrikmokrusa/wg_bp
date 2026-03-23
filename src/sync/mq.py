@@ -57,8 +57,9 @@ class MessageQueueSync(SyncBase):
             print("[MQ] Waiting for initial state synchronization from seed node...")
             while self.version == 0:
                 self.publishOnboard()
+                # block until we recieve response
                 try:
-                    await asyncio.wait_for(self.ready_event.wait(), timeout=1)
+                    await asyncio.wait_for(self.ready_event.wait(), timeout=5)
                     break
                 except asyncio.TimeoutError:
                     pass
@@ -75,7 +76,7 @@ class MessageQueueSync(SyncBase):
 
                 if data["type"] == STATE_UPDATE:
                     if data["version"] > self.version:
-                        print(f"[MQ] Received {data['type']} from peer {data['from']} via Message Queue...")
+                        print(f"[MQ] Received {data['type']} from peer {data['from']}.")
                         if self.version == 0:
                             print("[MQ] Initial state synchronization complete.")
                             self.ready_event.set()
@@ -83,18 +84,18 @@ class MessageQueueSync(SyncBase):
                         self.version = data["version"]
                         self.peers = data["state"]
                     elif data["version"] < self.version:
-                        print(f"[MQ] Received outdated {data['type']} from peer {data['from']} via Message Queue... sending them our state")
+                        print(f"[MQ] Received outdated {data['type']} from peer {data['from']}. Sending them our state")
                         self.publishState()
                     else:
-                        print(f"[MQ] Received {data['type']} with same version from peer {data['from']} via Message Queue... no action needed")
+                        print(f"[MQ] Received {data['type']} with same version from peer {data['from']}.")
                         continue
                 
                 elif data["type"] == DEPARTURE_NOTICE:
-                    print(f"[MQ] Received {data['type']} from peer {data['from']} via Message Queue...")
+                    print(f"[MQ] Received {data['type']} from peer {data['from']}.")
                     del self.peers[data["virtual_ip"]]
                     self.version += 1
                 elif data["type"] == ONBOARD_NOTICE:
-                    print(f"[MQ] Received {data['type']} from peer {data['from']} via Message Queue...")
+                    print(f"[MQ] Received {data['type']} from peer {data['from']}.")
                     self.publishState()
 
                 self.checkForChanges()
@@ -153,6 +154,8 @@ class MessageQueueSync(SyncBase):
         return info
 
     def checkForChanges(self):
+        self.state.lock_aquire()
+
         reload_required = False
         for peer_ip, peer_info in self.peers.items():
             if peer_ip == self.state.ip:
@@ -166,7 +169,7 @@ class MessageQueueSync(SyncBase):
                     peer_info["endpoint_port"]
                 )
                 self.sub.connect(f"tcp://{peer_info['virtual_ip']}:{peer_info['sync_port']}")
-                print(f"[MQ] Added new peer via MQ: {peer_ip} -> {peer_info}\n")
+                print(f"[MQ] Added new peer: {peer_ip} -> {peer_info}\n")
                 print(self.state.get_config())
                 reload_required = True
             else:
@@ -178,13 +181,15 @@ class MessageQueueSync(SyncBase):
         for existing_peer_ip, existing_peer_info in existing_peers_copy:
             if existing_peer_ip not in self.peers.keys():
                 self.state.remove_peer(existing_peer_ip)
-                print(f"[MQ] Removed peer via MQ: {existing_peer_ip} -> {existing_peer_info}\n")
+                print(f"[MQ] Removed peer: {existing_peer_ip} -> {existing_peer_info}\n")
                 reload_required = True
 
         if reload_required:
             self.state.reload_config()
             print(f"[MQ] syn peers: {self.peers}")
             print(self.state.get_config())
+
+        self.state.lock_release()
 
     def publishLastMessage(self):
         msg = {

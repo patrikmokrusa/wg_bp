@@ -24,6 +24,13 @@ class State:
         self.public_port = None
         self.update_public_ip()
         self._iplinkInit()
+        self.lock = threading.Lock()
+
+    def lock_aquire(self):
+        self.lock.acquire()
+
+    def lock_release(self):
+        self.lock.release()
 
     def _iplinkInit(self):
         self.ipr = IPRoute()
@@ -108,6 +115,7 @@ class State:
                 "persistent_keepalive": self.keepalive
             }
         )
+        print(f"[STATE] Added peer {peer_virtual_ip}")
 
     def _getAllowedIPs(self, peer_virtual_ip: str) -> list:
         allowed_ips = []
@@ -122,7 +130,6 @@ class State:
         if peer_virtual_ip in self.peers:
 
             try:
-                print(f"[STATE] Removing peer {peer_virtual_ip} from state and WireGuard config.")
                 self._wgSetOwnEventLoop(
                     self.interface,
                     peer={
@@ -134,6 +141,7 @@ class State:
                 print(f"[STATE] Error removing peer from WireGuard config: {e}")
 
             del self.peers[peer_virtual_ip]
+            print(f"[STATE] Removed peer {peer_virtual_ip}")
 
 
     def get_config(self)-> str:

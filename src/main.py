@@ -1,9 +1,11 @@
+import json
 import threading
 import time
 from state import State
 from discovery.join import DiscoveryJoin
 from discovery.broadcast import DiscoveryBroadcast
 from discovery.dnssd import DiscoveryDNSSD
+from sync.all_sync import AllSync
 from sync.dht import SyncDHT
 from sync.gossip import SyncGossip
 import argparse
@@ -32,7 +34,7 @@ def join_direct(args):
 
     dis = DiscoveryJoin(state, None, bootstrap_port=args.bootstrap_port)
     try:
-        sync_info = dis.startJoin(args.target_host, sync_port=args.sync_port)
+        sync_info = dis.startJoin(args.target_host, sync_port=args.sync_port) # this arg is used for MQ i need to pass it here
     except Exception as e:
         print(f"Error during JOIN: {e}")
         exit(1)
@@ -47,6 +49,13 @@ def join_direct(args):
         sync = SyncGossip(state, seed_node=sync_info["sync-seed"], port=args.sync_port)
     elif sync_info["sync-type"] == "MQ":
         sync = MessageQueueSync(state, seed_node=sync_info["sync-seed"], port=args.sync_port)
+    elif sync_info["sync-type"] == "ALL":
+        print("Joining network with all synchronization methods enabled...")
+        dht_info, gossip_info, mq_info = AllSync.splitInfo(sync_info)
+        sync_dht = SyncDHT(state, seed_node=(dht_info["sync-ip"], dht_info["sync-port"]), port=args.sync_port-1)
+        sync_gossip = SyncGossip(state, seed_node=gossip_info["sync-seed"], port=args.sync_port+1)
+        sync_mq = MessageQueueSync(state, seed_node=mq_info["sync-seed"], port=args.sync_port, interval=args.change_check_interval)
+        sync = AllSync(state, [sync_dht, sync_gossip, sync_mq])
         
     return state, sync, args.run
 
@@ -61,7 +70,7 @@ def broadcast_discover(args):
     dis = DiscoveryBroadcast(state, bootstrap_port=args.bootstrap_port, injected_sync=None)
 
     try:
-        sync_info = dis.startJoin()
+        sync_info = dis.startJoin(sync_port=args.sync_port) # this arg is used for MQ i need to pass it here
     except Exception as e:
         print(f"Error during JOIN: {e}")
         exit(1)
@@ -75,6 +84,13 @@ def broadcast_discover(args):
         sync = SyncGossip(state, seed_node=sync_info["sync-seed"], port=args.sync_port)
     elif sync_info["sync-type"] == "MQ":
         sync = MessageQueueSync(state, seed_node=sync_info["sync-seed"], port=args.sync_port)
+    elif sync_info["sync-type"] == "ALL":
+        print("Joining network with all synchronization methods enabled...")
+        dht_info, gossip_info, mq_info = AllSync.splitInfo(sync_info)
+        sync_dht = SyncDHT(state, seed_node=(dht_info["sync-ip"], dht_info["sync-port"]), port=args.sync_port-1)
+        sync_gossip = SyncGossip(state, seed_node=gossip_info["sync-seed"], port=args.sync_port+1)
+        sync_mq = MessageQueueSync(state, seed_node=mq_info["sync-seed"], port=args.sync_port, interval=args.change_check_interval)
+        sync = AllSync(state, [sync_dht, sync_gossip, sync_mq])
         
     return state, sync, args.run
 
@@ -106,7 +122,7 @@ def dnssd_discover(args):
 
 create_parser = subparsers.add_parser('create', help='Create a new network')
 add_common_args(create_parser)
-create_parser.add_argument('--sync', required=True, type=str, help='Synchronization technology (e.g., DHT)')
+create_parser.add_argument('--sync', required=True, type=str, help='Synchronization technology (DHT, Gossip, MQ, ALL)')
 create_parser.set_defaults(func='create')
 
 def create(args):
@@ -121,6 +137,12 @@ def create(args):
         sync = SyncGossip(state, port=args.sync_port)
     elif args.sync == "MQ":
         sync = MessageQueueSync(state, seed_node=None, port=args.sync_port, interval=args.change_check_interval)
+    elif args.sync == "ALL":
+        print("Creating network with all synchronization methods enabled...")
+        sync_dht = SyncDHT(state, port=args.sync_port, interval=args.change_check_interval)
+        sync_gossip = SyncGossip(state, port=args.sync_port+1)
+        sync_mq = MessageQueueSync(state, seed_node=None, port=args.sync_port+2, interval=args.change_check_interval)
+        sync = AllSync(state, [sync_dht, sync_gossip, sync_mq])
     else:
         print("Unsupported synchronization method specified.")
         exit(1)
@@ -184,7 +206,7 @@ def main():
         elif input_val == "help":
             print(help_msg)
 
-        elif input_val == "advertise":
+        elif input_val == "advertise" or input_val == "ad":
             if ad:
                 print("Stopping previous advertisement...")
                 ad.stopAdvertise()
@@ -204,13 +226,9 @@ def main():
             print(state.get_config())
             print(f"state.public_ip: {state.public_ip} state.public_port: {state.public_port}")
             print(f"state.peers: {state.peers}")
-            print(sync.getInfo())
-            
-        elif input_val == "force-check":
-            sync.checkForChanges()
-            pass
+            print(json.dumps(sync.getInfo(), indent=2))
 
-        elif input_val == "discover-join":
+        elif input_val == "discover-join" or input_val == "dis-join":
             try:
                 if disc_join:
                     print("Stopping previous discovery join...")
@@ -229,7 +247,7 @@ def main():
             disc_join = DiscoveryJoin(state, sync, bootstrap_port=port)
             disc_join.startAccept()
 
-        elif input_val == "discover-broadcast":
+        elif input_val == "discover-broadcast" or input_val == "dis-bcast":
             try:
                 if disc_bcast is not None or (disc_bcast is not None and disc_bcast.running):
                     print("Stopping previous discovery broadcast...")

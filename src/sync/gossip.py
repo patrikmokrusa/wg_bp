@@ -60,7 +60,7 @@ class SyncGossip(SyncBase):
             # onboarding
             new_peer = msg["state"][from_ip]
             self.peers[new_peer["virtual_ip"]] = new_peer
-            print(f"[Gossip] Onboarded new peer via Gossip: {new_peer['virtual_ip']}")
+            print(f"[Gossip] Onboarded new peer: {new_peer['virtual_ip']}")
             await self._sendStateToPeer(from_ip, from_port)
         elif msg["version"] < self.version:
             # update the other peer to our version and send them our state
@@ -69,7 +69,7 @@ class SyncGossip(SyncBase):
         elif msg["version"] == self.version:
             return
         else:
-            print(f"[Gossip] Received state update from peer {from_ip}:{from_port} via Gossip...")
+            print(f"[Gossip] Received state update from peer {from_ip}:{from_port}.")
             self.version = msg["version"]
             self.peers = msg["state"]
             self.checkForChanges()
@@ -217,6 +217,8 @@ class SyncGossip(SyncBase):
         self.loop.run_forever()
 
     def checkForChanges(self):
+        self.state.lock_aquire()
+
         reload_required = False
         for peer_ip, peer_info in self.peers.items():
             existing_peer = self.state.peers.get(peer_ip)
@@ -244,4 +246,7 @@ class SyncGossip(SyncBase):
                 reload_required = True
         if reload_required:
             self.state.reload_config()
+
+        self.state.lock_release()
+        
         

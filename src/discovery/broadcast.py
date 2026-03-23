@@ -4,13 +4,14 @@ from state import State
 from sync.dht import SyncDHT
 from sync.gossip import SyncGossip
 from sync.mq import MessageQueueSync
+from .base import DiscoveryBase
 import json
 
 JOIN_REQUEST = "BCAST_JOIN_REQUEST"
 JOIN_RESPONSE = "BCAST_JOIN_RESPONSE"
 ERROR  = "ERROR"
 
-class DiscoveryBroadcast:
+class DiscoveryBroadcast(DiscoveryBase):
     def __init__(self, injected_state: State, injected_sync: SyncDHT | SyncGossip | MessageQueueSync | None, bootstrap_port = 18888):
         self.state = injected_state
         self.sync = injected_sync
