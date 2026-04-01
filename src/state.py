@@ -116,6 +116,7 @@ class State:
             }
         )
         print(f"[STATE] Added peer {peer_virtual_ip}")
+        self.ping_all_peers()
 
     def _getAllowedIPs(self, peer_virtual_ip: str) -> list:
         allowed_ips = []
@@ -173,7 +174,7 @@ class State:
 
     def ping_all_peers(self)-> None:
         for peer_ip in self.peers.keys():
-            ping(peer_ip, verbose=False, count=10, timeout=0)
+            ping(peer_ip, verbose=False, count=3, timeout=0)
 
     def disable_config(self)-> None:
         return

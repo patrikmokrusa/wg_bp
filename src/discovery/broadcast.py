@@ -12,7 +12,7 @@ JOIN_RESPONSE = "BCAST_JOIN_RESPONSE"
 ERROR  = "ERROR"
 
 class DiscoveryBroadcast(DiscoveryBase):
-    def __init__(self, injected_state: State, injected_sync: SyncDHT | SyncGossip | MessageQueueSync | None, bootstrap_port = 18888):
+    def __init__(self, injected_state: State, injected_sync: SyncDHT | SyncGossip | MessageQueueSync | None, bootstrap_port: int = 18888)-> None:
         self.state = injected_state
         self.sync = injected_sync
         self.bootstrap_port = bootstrap_port
@@ -20,22 +20,22 @@ class DiscoveryBroadcast(DiscoveryBase):
         self.thread = None
         self.socket = None
 
-    def getInfo(self):
+    def getInfo(self) -> dict:
         return {
             "type": "BROADCAST",
             "port": self.bootstrap_port
         }
 
-    def stopAccept(self):
+    def stopAccept(self) -> None:
         self.running = False
         self.socket.shutdown(socket.SHUT_RDWR)
         self.socket.close()
 
-    def startAccept(self):
+    def startAccept(self) -> None:
         self.thread = threading.Thread(target=self._broadcastAcceptLoop, daemon=True)
         self.thread.start()
 
-    def _broadcastAcceptLoop(self):
+    def _broadcastAcceptLoop(self) -> None:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.socket.bind(("", self.bootstrap_port))
         print(f"[BCAST] Listening for broadcast messages on port {self.bootstrap_port}...")
@@ -50,7 +50,7 @@ class DiscoveryBroadcast(DiscoveryBase):
                 # print(f"[BCAST] Received broadcast message from {addr[0]}:{addr[1]}")
                 self._handle_client(data, addr)
 
-    def _handle_client(self, data, addr):
+    def _handle_client(self, data: bytes, addr: tuple) -> None:
         request = json.loads(data.decode('utf-8'))
         # print(f"[BCAST] Received message: {request} from {addr[0]}:{addr[1]}")
         if request['type'] == JOIN_REQUEST:
@@ -95,7 +95,7 @@ class DiscoveryBroadcast(DiscoveryBase):
 
         self.socket.sendto(json.dumps(response).encode('utf-8'), addr)
 
-    def startJoin(self, bootstrap_node: str = None, sync_port: int = None):
+    def startJoin(self, bootstrap_node: str = None, sync_port: int = None) -> dict:
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         # client.settimeout(5)

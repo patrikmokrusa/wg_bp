@@ -1,9 +1,12 @@
+from time import sleep
+
 from .base import DiscoveryBase
 
 from zeroconf import IPVersion, ServiceInfo, ServiceStateChange, Zeroconf, ServiceBrowser, ZeroconfServiceTypes
 from .broadcast import DiscoveryBroadcast
 from .join import DiscoveryJoin
 import socket
+from state import State
 
 TYPE_JOIN = "JOIN"
 TYPE_BROADCAST = "BROADCAST"
@@ -12,14 +15,14 @@ KEY_IP = "ip"
 KEY_PORT = "port"
 
 class DiscoveryDNSSD():
-    def __init__(self, injected_state):
+    def __init__(self, injected_state: State| None = None) -> None:
         self.state = injected_state
         self.zeroconf = Zeroconf(ip_version=IPVersion.V4Only)
         self.join_service_info = None
         self.broadcast_service_info = None
         self.available_services = []
 
-    def startAdvertise(self, discovery_instance) -> None:
+    def startAdvertise(self, discovery_instance: DiscoveryJoin | DiscoveryBroadcast) -> None:
         print("[DNSSD] Starting DNSSD discovery...")
         
         if discovery_instance:
@@ -28,7 +31,7 @@ class DiscoveryDNSSD():
             elif isinstance(discovery_instance, DiscoveryBroadcast):
                 self._registerBroadcastService(discovery_instance.getInfo())
 
-    def _registerJOINService(self, info):
+    def _registerJOINService(self, info: dict) -> None:
         address = input("Input reachable IP address for direct join:\n(default: 127.0.0.1)").strip()
         if not address:
             address = "127.0.0.1"
@@ -49,7 +52,7 @@ class DiscoveryDNSSD():
         print(f"[DNSSD] Registering JOIN service with address {address}:{port}...")
         self.zeroconf.register_service(self.join_service_info)
 
-    def _registerBroadcastService(self, info):
+    def _registerBroadcastService(self, info: dict) -> None:
             port = info["port"]
 
             self.broadcast_service_info = ServiceInfo(
@@ -67,7 +70,7 @@ class DiscoveryDNSSD():
             self.zeroconf.register_service(self.broadcast_service_info)
             
 
-    def stopAdvertise(self):
+    def stopAdvertise(self) -> None:
         print("[DNSSD] Stopping DNSSD discovery...")
         if self.join_service_info:
             self.zeroconf.unregister_service(self.join_service_info)
@@ -76,7 +79,7 @@ class DiscoveryDNSSD():
         if self.zeroconf:
             self.zeroconf.close()
 
-    def browseServices(self):
+    def browseServices(self) -> None:
         print(f"[DNSSD] Scanning for services on the local network...")
         services = [
             "_wg._tcp.local."
@@ -86,6 +89,7 @@ class DiscoveryDNSSD():
             selected_service = input("Select **index** of service to join:\n").strip()
             if not selected_service.isdigit():
                 print("Please enter a valid index number.")
+                sleep(1)
                 continue
             selected_service = int(selected_service)
             # if selected_service in self.available_services.keys():
@@ -103,6 +107,7 @@ class DiscoveryDNSSD():
                 return ret
             else:
                 print(f"Invalid selection.")
+                
 
 
     def on_service_state_change(self, zeroconf: Zeroconf, service_type: str, name: str, state_change: ServiceStateChange) -> None:

@@ -1,12 +1,11 @@
 
 import threading
-import time
-# from kad import DHT
 import json
 import logging
 from kademlia.network import Server
 from .base import SyncBase
 import asyncio
+from state import State
 
 for logger_name in ("kademlia", "rpcudp"):
     lib_logger = logging.getLogger(logger_name)
@@ -17,7 +16,7 @@ CHANGE_CHECK_KEY = "CHANGE_CHECK"
 KEY_LIST_KEY = "KEY_LIST"
 
 class SyncDHT(SyncBase):
-    def __init__(self, injected_state, seed_node=None, port=6881, interval=5):
+    def __init__(self, injected_state: State, seed_node: tuple | None = None, port: int = 6881, interval: int = 5) -> None:
         self.state = injected_state
         self.port = port
         self.interval = interval
@@ -71,11 +70,11 @@ class SyncDHT(SyncBase):
 
         asyncio.run_coroutine_threadsafe(self._async_init(), self.loop)
 
-    def _run_loop(self, loop):
+    def _run_loop(self, loop: asyncio.AbstractEventLoop) -> None:
         asyncio.set_event_loop(loop)
         loop.run_forever()
     
-    async def _async_init(self):
+    async def _async_init(self)-> None:
         self.termination_event = asyncio.Event()
         self.task = asyncio.create_task(self._check_for_changes_loop())
 
@@ -88,7 +87,7 @@ class SyncDHT(SyncBase):
             except asyncio.TimeoutError:
                 pass
 
-    def _setValueSync(self, key, value):
+    def _setValueSync(self, key: str, value: dict | int | None) -> None:
         value = json.dumps(value)  # Convert value to JSON string for storage
 
 
@@ -97,7 +96,7 @@ class SyncDHT(SyncBase):
         return ret.result()
 
 
-    def _getValueSync(self, key):
+    def _getValueSync(self, key: str) -> dict | int | None:
         ret = asyncio.run_coroutine_threadsafe(self.dht.get(key), self.server_loop).result()
         # print(f"[DHT] Got value for key '{key}' from DHT")
         if not ret:
@@ -106,10 +105,10 @@ class SyncDHT(SyncBase):
 
         return ret
 
-    def initSync(self):
+    def initSync(self) -> None:
         print("[DHT] Initializing DHT synchronization...")
 
-    def getInfo(self):
+    def getInfo(self)-> dict:
         info = {
             "sync-type": "DHT",
             "sync-ip": self.state.ip,
@@ -117,7 +116,7 @@ class SyncDHT(SyncBase):
         }
         return info
 
-    def publishChange(self, virtual_ip, public_key, endpoint_ip, endpoint_port, sync_port=None):
+    def publishChange(self, virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int, sync_port: int | None = None):
         print("[DHT] Publishing changes to DHT...")
 
         self._setValueSync(virtual_ip, {
@@ -135,7 +134,7 @@ class SyncDHT(SyncBase):
         key_list.append(virtual_ip)
         self._setValueSync(KEY_LIST_KEY, key_list)
 
-    def checkForChangeTrigger(self):
+    def checkForChangeTrigger(self) -> None:
         # print("[DHT] Checking for changes in DHT...")
         current_value = self._getValueSync(CHANGE_CHECK_KEY)
         if current_value != self.CurrentChangeCheckValue:
@@ -150,25 +149,24 @@ class SyncDHT(SyncBase):
             self.CurrentChangeCheckValue = current_value
 
 
-    def appendToKeyList(self, virtual_ip):
+    def appendToKeyList(self, virtual_ip: str) -> None:
 
         key_list = self._getValueSync(KEY_LIST_KEY)
         if virtual_ip not in key_list:
             key_list.append(virtual_ip)
             self._setValueSync(KEY_LIST_KEY, key_list)
         
-    def isInKeyList(self, virtual_ip):
+    def isInKeyList(self, virtual_ip: str) -> bool:
         key_list = self._getValueSync(KEY_LIST_KEY)
-        # print(f"[DHT*****] Keylist: {key_list} checking for {virtual_ip} returning {virtual_ip in key_list}")
         return virtual_ip in key_list
     
-    def removeFromKeyList(self, virtual_ip):
+    def removeFromKeyList(self, virtual_ip: str) -> None:
         key_list = self._getValueSync(KEY_LIST_KEY)
         if virtual_ip in key_list:
             key_list.remove(virtual_ip)
             self._setValueSync(KEY_LIST_KEY, key_list)
 
-    def checkIfExistsByKeyList(self):
+    def checkIfExistsByKeyList(self) -> list:
         key_list = self._getValueSync(KEY_LIST_KEY)
         active_peers = []
         for key in key_list:
@@ -176,7 +174,7 @@ class SyncDHT(SyncBase):
                 active_peers.append(key)
         return active_peers
 
-    def checkForCHanges(self):
+    def checkForCHanges(self) -> None:
         self.state.lock_aquire()
 
         change_happened = False
@@ -227,7 +225,7 @@ class SyncDHT(SyncBase):
         self.state.lock_release()
 
 
-    def exitSync(self):
+    def exitSync(self) -> None:
         print("[DHT] Exiting DHT synchronization...")
         if self.termination_event:
             self.loop.call_soon_threadsafe(self.termination_event.set)

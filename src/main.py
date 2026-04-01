@@ -99,9 +99,9 @@ add_common_args(dnssd_parser)
 dnssd_parser.set_defaults(func='dnssd_discover')
 
 def dnssd_discover(args):
-    state = State(args.ip, port=args.port, interface=args.interface)
+    # state = State(args.ip, port=args.port, interface=args.interface)
 
-    dis = DiscoveryDNSSD(state)
+    dis = DiscoveryDNSSD()
 
     info = dis.browseServices()
     if info:
@@ -268,7 +268,12 @@ def main():
                 disc_bcast.startAccept()
 
             except Exception as e:
-                print(f"Error in discovery broadcast: {e}")        
+                print(f"Error in discovery broadcast: {e}")   
+
+        elif input_val == "wait":
+            # testing feature
+            seconds = input("seconds to wait: ")
+            time.sleep(int(seconds))
     
 if __name__ == "__main__":
     main()

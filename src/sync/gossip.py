@@ -10,7 +10,7 @@ from .base import SyncBase
 STATE_UPDATE = "STATE_UPDATE"
 
 class SyncGossip(SyncBase):
-    def __init__(self, injected_state : State, seed_node=None, port=6888, interval=5):
+    def __init__(self, injected_state : State, seed_node: dict | None=None, port: int=6888, interval: int=5) -> None:
         print("Initializing Gossip synchronization...")
         self.interval = interval
         self.state = injected_state
@@ -42,7 +42,7 @@ class SyncGossip(SyncBase):
         # Start async initialization in the event loop
         self.createTask(self._async_init())
     
-    async def _async_init(self):
+    async def _async_init(self) -> None:
         self.shutdown_event = asyncio.Event()
         self.server = await asyncio.start_server(self._handleGossip, self.state.ip, self.port)
         print(f"[Gossip] Gossip server listening on {self.state.ip}:{self.port}")
@@ -51,7 +51,7 @@ class SyncGossip(SyncBase):
         self.gossip_task = asyncio.create_task(self._sendGossip())
 
 
-    async def _handleGossip(self, reader, writer):
+    async def _handleGossip(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         msg = json.loads((await reader.readline()).decode())
         # print(f"[*] Received Gossip message")
         from_ip, from_port = msg["from"].split(":")
@@ -74,7 +74,7 @@ class SyncGossip(SyncBase):
             self.peers = msg["state"]
             self.checkForChanges()
 
-    async def _sendGossip(self):
+    async def _sendGossip(self) -> None:
         while True:
             known_peers = self.peers.keys()
             if len(known_peers) == 1:
@@ -102,7 +102,7 @@ class SyncGossip(SyncBase):
             except asyncio.TimeoutError:
                 pass  # Timeout, continue gossip
 
-    async def _sendStateToPeer(self, peer_ip, peer_port):
+    async def _sendStateToPeer(self, peer_ip: str, peer_port: int | None) -> None:
         if peer_port is None:
             print(f"Peer {peer_ip} not onboarded yet, cannot send state.")
             return
@@ -119,11 +119,11 @@ class SyncGossip(SyncBase):
         writer.close()
         await writer.wait_closed()
 
-            
-    def initSync(self):
+
+    def initSync(self) -> None:
         print(f"[Gossip] Initializing Gossip synchronization...")
 
-    def getInfo(self):
+    def getInfo(self) -> dict:
         info = {
             "sync-type": "Gossip",
             "sync-ip": self.state.ip,
@@ -134,7 +134,7 @@ class SyncGossip(SyncBase):
 
     
 
-    def publishChange(self, virtual_ip, public_key, endpoint_ip, endpoint_port, sync_port=None):
+    def publishChange(self, virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int, sync_port: int | None=None) -> None:
         print(f"[Gossip] Publishing changes to Gossip network...")
         self.version += 1
         msg = {
@@ -160,7 +160,7 @@ class SyncGossip(SyncBase):
         print(f"[Gossip] Successfully published change: {msg}")
 
 
-    async def _sendLastGossip(self):
+    async def _sendLastGossip(self) -> None:
         # Send ourselves still in state, but set flag so others know we're leaving
         self.version += 1
         del self.peers[self.state.ip]
@@ -177,7 +177,7 @@ class SyncGossip(SyncBase):
             except Exception as e:
                 print(f"[!] Error sending departure: {e}")
 
-    def exitSync(self):
+    def exitSync(self) -> None:
         print(f"[Gossip] Exiting Gossip synchronization...")
         self.sendUpdates = False
         
@@ -207,7 +207,7 @@ class SyncGossip(SyncBase):
         self.loop.call_soon_threadsafe(self.loop.stop)
         self.loop_thread.join(timeout=2)
     
-    def createTask(self, awaitable):
+    def createTask(self, awaitable: asyncio.coroutine) -> asyncio.Future:
         """Create a task in the event loop"""
         return asyncio.run_coroutine_threadsafe(awaitable, self.loop)
     
@@ -216,7 +216,7 @@ class SyncGossip(SyncBase):
         asyncio.set_event_loop(self.loop)
         self.loop.run_forever()
 
-    def checkForChanges(self):
+    def checkForChanges(self) -> None:
         self.state.lock_aquire()
 
         reload_required = False

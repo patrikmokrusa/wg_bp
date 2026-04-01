@@ -2,8 +2,6 @@ import json
 import threading
 import zmq
 import asyncio
-import time
-import socket
 from .base import SyncBase
 
 from state import State
@@ -14,7 +12,7 @@ ONBOARD_NOTICE = "ONBOARD_NOTICE"
 
 
 class MessageQueueSync(SyncBase):
-    def __init__(self, state: State, seed_node = None, port=5555, interval=0.1):
+    def __init__(self, state: State, seed_node: dict | None = None, port: int = 5555, interval: float = 0.1) -> None:
         self.state = state
         self.port = port
         self.interval = interval
@@ -49,7 +47,7 @@ class MessageQueueSync(SyncBase):
         self.loop_thread.start()
         self.createTask(self._async_init(seed_node=seed_node))
 
-    async def _async_init(self, seed_node = None):
+    async def _async_init(self, seed_node: dict | None = None) -> None:
         self.terminate_event = asyncio.Event()
         self.listen_task = asyncio.create_task(self._listenForUpdates())
 
@@ -64,7 +62,7 @@ class MessageQueueSync(SyncBase):
                 except asyncio.TimeoutError:
                     pass
 
-    async def _listenForUpdates(self):
+    async def _listenForUpdates(self) -> None:
         while not self.terminate_event.is_set():
             try:
                 msg = self.sub.recv_string(flags=zmq.NOBLOCK)
@@ -102,7 +100,7 @@ class MessageQueueSync(SyncBase):
             except zmq.Again:
                 await asyncio.sleep(self.interval)
 
-    def publishChange(self, virtual_ip, public_key, endpoint_ip, endpoint_port, sync_port = None):
+    def publishChange(self, virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int, sync_port: int | None = None) -> None:
         self.peers[virtual_ip] = {
             "virtual_ip": virtual_ip,
             "public_key": public_key,
@@ -116,14 +114,14 @@ class MessageQueueSync(SyncBase):
         self.version += 1
         self.publishState()
 
-    def publishOnboard(self):
+    def publishOnboard(self) -> None:
         msg = {
             "type": ONBOARD_NOTICE,
             "from": f"{self.state.ip}:{self.port}",
         }
         self.pub.send_string(json.dumps(msg))
 
-    def publishState(self):
+    def publishState(self) -> None:
         msg = {
             "type": STATE_UPDATE,
             "from": f"{self.state.ip}:{self.port}",
@@ -133,7 +131,7 @@ class MessageQueueSync(SyncBase):
         
         self.pub.send_string(json.dumps(msg))
 
-    def createTask(self, awaitable):
+    def createTask(self, awaitable: asyncio.coroutine) -> asyncio.Future:
         """Create a task in the event loop"""
         return asyncio.run_coroutine_threadsafe(awaitable, self.loop)
     
@@ -142,18 +140,18 @@ class MessageQueueSync(SyncBase):
         asyncio.set_event_loop(self.loop)
         self.loop.run_forever()
 
-    def initSync(self):
+    def initSync(self) -> None:
         print("Initializing Message Queue synchronization...")
         pass
 
-    def getInfo(self):
+    def getInfo(self) -> dict:
         info = {
             "sync-type": "MQ",
             "sync-seed": self.peers[self.state.ip],
         }
         return info
 
-    def checkForChanges(self):
+    def checkForChanges(self) -> None:
         self.state.lock_aquire()
 
         reload_required = False
@@ -191,7 +189,7 @@ class MessageQueueSync(SyncBase):
 
         self.state.lock_release()
 
-    def publishLastMessage(self):
+    def publishLastMessage(self) -> None:
         msg = {
             "type": DEPARTURE_NOTICE,
             "from": f"{self.state.ip}:{self.port}",
@@ -201,7 +199,7 @@ class MessageQueueSync(SyncBase):
         self.pub.send_string(json.dumps(msg))
 
 
-    def exitSync(self):
+    def exitSync(self) -> None:
         print(f"[MQ] Shutting down Message Queue synchronization...")
         self.publishLastMessage()
         self.terminate_event.set()

@@ -8,28 +8,28 @@ from sync.mq import MessageQueueSync
 from state import State
 
 class DiscoveryJoin(DiscoveryBase):
-    def __init__(self, injected_state: State, injected_sync: SyncDHT | SyncGossip | MessageQueueSync, bootstrap_port = 17777):
+    def __init__(self, injected_state: State, injected_sync: SyncDHT | SyncGossip | MessageQueueSync, bootstrap_port: int = 17777):
         self.state = injected_state
         self.sync = injected_sync
         self.bootstrap_port = bootstrap_port
         self.running = True
 
-    def getInfo(self):
+    def getInfo(self) -> dict:
         return {
             "type": "JOIN",
             "port": self.bootstrap_port
         }
 
-    def stopAccept(self):
+    def stopAccept(self) -> None:
         self.running = False
         self.socket.shutdown(socket.SHUT_RDWR)
         self.socket.close()
 
-    def startAccept(self):
+    def startAccept(self) -> None:
         self.thread = threading.Thread(target=self._acceptLoop, daemon=True)
         self.thread.start()
 
-    def _acceptLoop(self):
+    def _acceptLoop(self) -> None:
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         print(f"[JOIN] Binding to port {self.bootstrap_port} for accepting JOIN connections...")
         self.socket.bind(("", self.bootstrap_port))
@@ -50,13 +50,13 @@ class DiscoveryJoin(DiscoveryBase):
         self.socket.close()
 
 
-    def get_error_msg(self, status):
+    def get_error_msg(self, status: str) -> dict:
         return {
             "type": "ERROR",
             "status": status
         }
     
-    def parse_request_msg(self, msg_str):
+    def parse_request_msg(self, msg_str: str) -> tuple:
         msg = literal_eval(msg_str)
         type = msg["type"]
         status = msg["status"]
@@ -69,7 +69,7 @@ class DiscoveryJoin(DiscoveryBase):
         return type, status, content
 
 
-    def handle_client(self, client):
+    def handle_client(self, client: socket.socket) -> None:
         request = client.recv(1024)
         print(f"[JOIN] Received: {request.decode('utf-8')}")
 
@@ -114,7 +114,7 @@ class DiscoveryJoin(DiscoveryBase):
         client.send(str(response).encode('utf-8'))
         client.close()
 
-    def parse_response_msg(self, msg_str):
+    def parse_response_msg(self, msg_str: str) -> tuple:
         msg = literal_eval(msg_str)
         type = msg["type"]
         status = msg["status"]
