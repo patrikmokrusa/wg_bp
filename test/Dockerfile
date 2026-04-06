@@ -1,0 +1,22 @@
+# Use base Python image
+FROM python:3.12
+
+WORKDIR /app
+
+# Copy repo into container
+COPY . . 
+
+# Install any requirements
+RUN pip install --no-cache-dir -r requirements.txt
+RUN apt-get update && apt-get install -y wireguard
+RUN apt-get install -y iputils-ping
+RUN apt install -y iproute2
+
+RUN chmod +x /app/test/create_script.sh
+RUN chmod +x /app/test/join_direct_script.sh
+RUN chmod +x /app/test/join_bcast_script.sh
+RUN chmod +x /app/test/join_dnssd_script.sh
+
+
+# Run Python program
+# CMD [ "cd src" ]

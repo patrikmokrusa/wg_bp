@@ -1,0 +1,12 @@
+FROM python:3.12
+
+WORKDIR /app
+
+# Copy repo into container
+COPY ./test/stun/ . 
+
+RUN apt-get update
+RUN apt-get install -y iputils-ping
+RUN apt install -y iproute2
+
+CMD [ "python3", "-u", "stun.py" ]

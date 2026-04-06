@@ -38,7 +38,7 @@ class SyncDHT(SyncBase):
         if seed_node:
             asyncio.run_coroutine_threadsafe(self.listener_dht.listen(port, self.state.ip), self.listener_loop).result()
             asyncio.run_coroutine_threadsafe(self.listener_dht.bootstrap([seed_node]), self.listener_loop).result()
-            asyncio.run_coroutine_threadsafe(self.dht.listen(port-1, "127.0.0.1"), self.server_loop).result()
+            asyncio.run_coroutine_threadsafe(self.dht.listen(port-1, self.state.ip), self.server_loop).result()
             asyncio.run_coroutine_threadsafe(self.dht.bootstrap([seed_node, (self.state.ip, port)]), self.server_loop).result()
             
             print(f"[DHT] DHT server started on port:{self.port} with bootstrap node {seed_node}")
@@ -55,7 +55,7 @@ class SyncDHT(SyncBase):
         else:
             asyncio.run_coroutine_threadsafe(self.listener_dht.listen(port, self.state.ip), self.listener_loop).result()
             
-            asyncio.run_coroutine_threadsafe(self.dht.listen(port-1, "127.0.0.1"), self.server_loop).result()
+            asyncio.run_coroutine_threadsafe(self.dht.listen(port-1, self.state.ip), self.server_loop).result()
             asyncio.run_coroutine_threadsafe(self.dht.bootstrap([(self.state.ip, port)]), self.server_loop).result()
 
             self._setValueSync(CHANGE_CHECK_KEY, 0)
@@ -175,8 +175,8 @@ class SyncDHT(SyncBase):
         return active_peers
 
     def checkForCHanges(self) -> None:
-        self.state.lock_aquire()
-
+        self.state.lock_aquire(self)
+        # print(f"[DHT] Checking for changes in DHT... START")
         change_happened = False
 
         key_list = self._getValueSync(KEY_LIST_KEY)
@@ -211,17 +211,26 @@ class SyncDHT(SyncBase):
             
             except TypeError:
                 # Peer has been removed from DHT
-                self.state.remove_peer(key)
-                print(f"[DHT] Removed peer from DHT: {key} ")
-                change_happened = True
-                continue
+                # print(f"[DHT] tady se to zkurvilo")
+                # print(f"[DHT] {key} self.state.peers.keys() {self.state.peers.keys()}")
+                if key in self.state.peers.keys():
+                    self.state.remove_peer(key)
+                    print(f"[DHT] Removed peer from DHT: {key} ")
+                    change_happened = True
+                    continue
+                print(f"[DHT] 1")
+            print(f"[DHT] 2")
 
+            if peer_info == None:
+                continue
             if self.check_individual_peer_change(peer_info, existing_peer):
                 change_happened = True
-
+        #     print(f"[DHT] 2.5")
+        # print(f"[DHT] 3")
         if change_happened:
             self.state.reload_config()
         
+        # print(f"[DHT] Finished checking for changes in DHT... END")
         self.state.lock_release()
 
 

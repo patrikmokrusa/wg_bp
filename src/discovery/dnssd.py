@@ -36,6 +36,8 @@ class DiscoveryDNSSD():
         if not address:
             address = "127.0.0.1"
         
+        address = socket.gethostbyname(address)
+
         port = info["port"]
 
         self.join_service_info = ServiceInfo(

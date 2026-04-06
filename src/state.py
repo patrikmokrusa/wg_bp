@@ -1,3 +1,7 @@
+import socket
+import json
+
+
 import subprocess
 import urllib
 import stun
@@ -6,10 +10,21 @@ from pyroute2 import IPRoute, WireGuard
 import threading
 import asyncio
 
-STUN_SERVER = 'stun1.l.google.com'
+STUN_SERVERS = [
+    ("stun.l.google.com", 19302),
+    ("stunserver2025.stunprotocol.org", 3478),
+    ("stun1.l.google.com", 19302),
+]
+
+CUSTOM_STUN_SERVERS = [
+    ("stun", 9999),
+    ("host.docker.internal", 9999),
+    ("127.0.0.1", 9999),
+    ("172.18.0.1", 9999),
+]
 
 class State:
-    def __init__(self, ip: str, port: int = 51820, interface="wg0", keepalive=25):
+    def __init__(self, ip: str, port: int = 51820, interface: str = "wg0", keepalive: int = 25) -> None:
         self.private_key = None
         self._gen_private_key()
         self.public_key = None
@@ -26,26 +41,29 @@ class State:
         self._iplinkInit()
         self.lock = threading.Lock()
 
-    def lock_aquire(self):
+    def lock_aquire(self, requester) -> None:
+        # print(f"[STATE] {requester} acquiring lock...")
         self.lock.acquire()
 
-    def lock_release(self):
+    def lock_release(self) -> None:
         self.lock.release()
 
-    def _iplinkInit(self):
+    def _iplinkInit(self) -> None:
         self.ipr = IPRoute()
 
-        self.ipr.link("add", ifname=self.interface, kind="wireguard")
+        if not self.ipr.link_lookup(ifname=self.interface):
+            self.ipr.link("add", ifname=self.interface, kind="wireguard")
 
         idx = self.ipr.link_lookup(ifname=self.interface)[0]
 
         self.ipr.addr("add", index=idx, address=self.ip, prefixlen=24)
 
+        self._wgInit()
+
         self.ipr.link("set", index=idx, state="up")
 
-        self._wgInit()
     
-    def _wgInit(self):
+    def _wgInit(self) -> None:
         self.wg = WireGuard()
 
         self.wg.set(
@@ -54,7 +72,7 @@ class State:
             listen_port=self.port
         )
 
-    def _wg_set(self, interface, **kwargs):
+    def _wg_set(self, interface, **kwargs) -> None:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
@@ -67,38 +85,76 @@ class State:
             asyncio.set_event_loop(None)
             loop.close()
 
-    def _wgSetOwnEventLoop(self, interface, **kwargs):
+    def _wgSetOwnEventLoop(self, interface, **kwargs) -> None:
         thread = threading.Thread(target=self._wg_set, args=(interface,), kwargs=kwargs)
         thread.start()
         thread.join()
-        
 
-    def update_public_ip_request(self)-> None:
-        external_ip = urllib.request.urlopen('https://api.ipify.org').read().decode('utf8')
-        self.public_ip = external_ip
-
-    def update_public_ip(self):
-    
+    def get_public_ip(self):
         print("[STATE] Determining public IP and port via STUN...")
-        mapped_addr = stun.get_ip_info('0.0.0.0', self.port, stun_host=STUN_SERVER)
-        print(f"[STATE] STUN result: {mapped_addr}")
-        if mapped_addr[1] is None or mapped_addr[2] is None:
-            print("[STATE] Failed to get public IP via STUN.")
-            print("[STATE] Falling back to HTTP request method...")
-            self.update_public_ip_request()
-            return
+
+        for stun_host, stun_port in STUN_SERVERS:
+            try:
+                mapped_addr = stun.get_ip_info(
+                    '0.0.0.0',
+                    self.port,
+                    stun_host=stun_host,
+                    stun_port=stun_port,
+                )
+                print(f"[STATE] STUN result from {stun_host}:{stun_port}: {mapped_addr}")
+
+                if mapped_addr[1] is None or mapped_addr[2] is None:
+                    continue
+
+                return mapped_addr[1], mapped_addr[2]
+                if mapped_addr[0] == 'Symmetric NAT':
+                    print("[STATE] Symmetric NAT detected. Direct UDP hole punching may fail.")
+                return
+            except Exception as e:
+                print(f"[STATE] STUN lookup failed via {stun_host}:{stun_port}: {e}")
+
+
+    def update_public_ip(self) -> None:
+        print("[STATE] CUSTOM STUN")
+
+        for stun_host, stun_port in CUSTOM_STUN_SERVERS:
+                
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.settimeout(3)
+            sock.bind(("", self.port))
+            try:
+                sock.sendto(b"STUN request", (stun_host, stun_port))
+                data, addr = sock.recvfrom(1024)
+                print(f"[STATE] Received STUN response: {data.decode('utf-8')} from {addr[0]}:{addr[1]}")
+                response = json.loads(data.decode('utf-8'))
+                self.public_ip = response['ip']
+                self.public_port = response['port']
+                sock.close()
+                return
+            except Exception as e:
+                pass
         
-        
-        self.public_ip = mapped_addr[1]
-        self.public_port = mapped_addr[2]
+        print(f"[STATE] Custom STUN failed.")
+        sock.close()
+
+        try:
+            self.public_ip, self.public_port = self.get_public_ip()
+        except Exception as e:
+            print(f"[STATE] Error occurred while fetching public IP: {e}")
+            exit(1)
 
     def _gen_private_key(self)-> None:
         cli = subprocess.Popen(["wg", "genkey"], stdout=subprocess.PIPE)
-        self.private_key = cli.stdout.read().decode("utf-8")
+        key = cli.stdout.read().decode("utf-8")
+        self.private_key = key.rstrip("\n")
+        # self.private_key = key
+
     
     def _gen_public_key(self)-> None:
         cli = subprocess.Popen(["wg", "pubkey"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-        self.public_key = cli.communicate(input=self.private_key.encode("utf-8"))[0].decode("utf-8")
+        key = cli.communicate(input=self.private_key.encode("utf-8"))[0].decode("utf-8")
+        self.public_key = key.rstrip("\n")
+        # self.public_key = key
 
     def add_peer(self, peer_virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int = 51820) -> None:
         if peer_virtual_ip == self.ip:
@@ -115,6 +171,7 @@ class State:
                 "persistent_keepalive": self.keepalive
             }
         )
+        print(self.get_config())
         print(f"[STATE] Added peer {peer_virtual_ip}")
         self.ping_all_peers()
 
@@ -123,7 +180,8 @@ class State:
         if "/" in peer_virtual_ip:
             allowed_ips.append(peer_virtual_ip)
         else:
-            allowed_ips.append(peer_virtual_ip + "/24")
+            # Each peer should own only its host address in WireGuard cryptokey routing.
+            allowed_ips.append(peer_virtual_ip + "/32")
         return allowed_ips
 
 
@@ -142,13 +200,15 @@ class State:
                 print(f"[STATE] Error removing peer from WireGuard config: {e}")
 
             del self.peers[peer_virtual_ip]
+
+            print(self.get_config())
             print(f"[STATE] Removed peer {peer_virtual_ip}")
 
 
     def get_config(self)-> str:
-        config = ""
+        config = "\n"
         config += "[Interface]\n"
-        config += f"PrivateKey = {self.private_key}"
+        config += f"PrivateKey = {self.private_key}\n"
         config += f"Address = {self.ip}\n"
         config += f"ListenPort = {self.port}\n\n"
         for peer_ip, peer_info in self.peers.items():
@@ -187,6 +247,16 @@ class State:
 
         self.ipr.close()
         self.wg.close()
+
+    def netlinkUp(self):
+        idx = self.ipr.link_lookup(ifname=self.interface)[0]
+        self.ipr.link("set", index=idx, state="up")
+
+    def netlinkDown(self):
+        idx = self.ipr.link_lookup(ifname=self.interface)[0]
+        self.ipr.link("set", index=idx, state="down")
+
+    
 
     def reload_config(self)-> None:
         return

@@ -8,6 +8,8 @@ from state import State
 from .base import SyncBase
 
 STATE_UPDATE = "STATE_UPDATE"
+DEGREE = 2
+DEPARTURE_NOTICE = "DEPARTURE_NOTICE"
 
 class SyncGossip(SyncBase):
     def __init__(self, injected_state : State, seed_node: dict | None=None, port: int=6888, interval: int=5) -> None:
@@ -16,6 +18,8 @@ class SyncGossip(SyncBase):
         self.state = injected_state
         self.port = port
         self.seed_node = seed_node
+
+        self.send_lock = threading.Lock()
 
         self.sendUpdates = True
         self.shutdown_event = None  # Will be created in async context
@@ -61,6 +65,7 @@ class SyncGossip(SyncBase):
             new_peer = msg["state"][from_ip]
             self.peers[new_peer["virtual_ip"]] = new_peer
             print(f"[Gossip] Onboarded new peer: {new_peer['virtual_ip']}")
+            self.version += 1
             await self._sendStateToPeer(from_ip, from_port)
         elif msg["version"] < self.version:
             # update the other peer to our version and send them our state
@@ -74,6 +79,13 @@ class SyncGossip(SyncBase):
             self.peers = msg["state"]
             self.checkForChanges()
 
+        if msg["type"] == DEPARTURE_NOTICE:
+            print(f"[Gossip] Received departure notice from {from_ip}:{from_port}")
+            if from_ip in self.peers.keys():
+                del self.peers[from_ip]
+                self.checkForChanges()
+
+
     async def _sendGossip(self) -> None:
         while True:
             known_peers = self.peers.keys()
@@ -84,16 +96,25 @@ class SyncGossip(SyncBase):
                 except asyncio.TimeoutError:
                     continue
             
-            while True:
-                random_peer_ip = random.choice(list(known_peers))
-                if random_peer_ip == self.state.ip:
-                    continue
-                else:
-                    break
-            try:
-                await self._sendStateToPeer(random_peer_ip, self.peers[random_peer_ip]["sync_port"])
-            except Exception as e:
-                print(f"[!] Error sending gossip to peer {random_peer_ip}: {e}")
+            contacted_peers = []
+
+            for _ in range(min(DEGREE, len(known_peers)-1)):
+                while True:
+                    random_peer_ip = random.choice(list(known_peers))
+                    if random_peer_ip == self.state.ip:
+                        continue
+                    elif random_peer_ip in contacted_peers:
+                        continue
+                    else:
+                        break
+
+                contacted_peers.append(random_peer_ip)
+                
+                try:
+                    await self._sendStateToPeer(random_peer_ip, self.peers[random_peer_ip]["sync_port"])
+                except Exception as e:
+                    if random_peer_ip not in self.state.peers.keys():
+                        del self.peers[random_peer_ip]
             
             # Wait for interval or shutdown event
             try:
@@ -102,22 +123,39 @@ class SyncGossip(SyncBase):
             except asyncio.TimeoutError:
                 pass  # Timeout, continue gossip
 
-    async def _sendStateToPeer(self, peer_ip: str, peer_port: int | None) -> None:
+    async def _sendStateToPeer(self, peer_ip: str, peer_port: int | None, departure: bool = False) -> None:
+        self.send_lock.acquire()
+
         if peer_port is None:
-            print(f"Peer {peer_ip} not onboarded yet, cannot send state.")
+            print(f"[Gossip] Peer {peer_ip} not onboarded yet, cannot send state.")
+            self.send_lock.release()
             return
 
-        reader, writer = await asyncio.open_connection(peer_ip, peer_port)
+        # Add timeout to connection attempt (e.g., 5 seconds)
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(peer_ip, peer_port), timeout=1
+            )
+        except Exception as e:
+            # print(f"[*!*] Error connecting to peer {peer_ip}:{peer_port} - {e}")
+            self.send_lock.release()
+            raise
+        
         msg = {
             "type": STATE_UPDATE,
             "version": self.version,
             "from": f"{self.state.ip}:{self.port}",
             "state": self.peers
         }
+
+        if departure:
+            msg["type"] = DEPARTURE_NOTICE
+
         writer.write((json.dumps(msg) + "\n").encode())
         await writer.drain()
         writer.close()
         await writer.wait_closed()
+        self.send_lock.release()
 
 
     def initSync(self) -> None:
@@ -157,25 +195,37 @@ class SyncGossip(SyncBase):
         if virtual_ip == self.state.ip:
             self.peers[virtual_ip]["sync_port"] = self.port
 
-        print(f"[Gossip] Successfully published change: {msg}")
+        # print(f"[Gossip] Successfully published change: {msg}")
 
 
     async def _sendLastGossip(self) -> None:
-        # Send ourselves still in state, but set flag so others know we're leaving
         self.version += 1
         del self.peers[self.state.ip]
 
-        if len(self.peers) > 0:
-            random_peer_ip = random.choice(list(self.peers.keys()))
+        contacted_peers = []
         
+
+        if len(self.peers) <= 0:
+            return
+
+        for _ in range(min(DEGREE, len(self.peers))):
+            while True:
+                random_peer_ip = random.choice(list(self.peers.keys()))
+                if random_peer_ip in contacted_peers:
+                    continue
+                else:
+                    break
+
+            contacted_peers.append(random_peer_ip)
+            
             try:
-                await self._sendStateToPeer(
-                    random_peer_ip, 
-                    self.peers[random_peer_ip]["sync_port"]
-                )
+                await self._sendStateToPeer(random_peer_ip, self.peers[random_peer_ip]["sync_port"], departure=True)
                 print(f"[Gossip] Departure message sent to {random_peer_ip}")
             except Exception as e:
-                print(f"[!] Error sending departure: {e}")
+                if random_peer_ip not in self.state.peers.keys():
+                    del self.peers[random_peer_ip]
+                    return
+    
 
     def exitSync(self) -> None:
         print(f"[Gossip] Exiting Gossip synchronization...")
@@ -187,7 +237,7 @@ class SyncGossip(SyncBase):
         
         # Send final state
         try:
-            self.createTask(self._sendLastGossip()).result(timeout=1)
+            self.createTask(self._sendLastGossip()).result(timeout=5)
         except:
             pass
         
@@ -198,7 +248,7 @@ class SyncGossip(SyncBase):
         # Wait for gossip task to finish
         if self.gossip_task:
             try:
-                self.createTask(asyncio.sleep(1)).result(timeout=2)
+                self.createTask(asyncio.sleep(1)).result(timeout=5)
                 self.gossip_task.result()
             except:
                 pass
@@ -207,46 +257,46 @@ class SyncGossip(SyncBase):
         self.loop.call_soon_threadsafe(self.loop.stop)
         self.loop_thread.join(timeout=2)
     
-    def createTask(self, awaitable: asyncio.coroutine) -> asyncio.Future:
-        """Create a task in the event loop"""
+    def createTask(self, awaitable):
         return asyncio.run_coroutine_threadsafe(awaitable, self.loop)
     
     def _run_loop(self):
-        """Run the event loop"""
         asyncio.set_event_loop(self.loop)
         self.loop.run_forever()
 
     def checkForChanges(self) -> None:
-        self.state.lock_aquire()
-
+        self.state.lock_aquire(self)
+        # print(f"[Gossip] Checking for changes in peers")
         reload_required = False
         for peer_ip, peer_info in self.peers.items():
             existing_peer = self.state.peers.get(peer_ip)
             if not existing_peer:
+                if peer_info["virtual_ip"] == self.state.ip:
+                    continue
                 self.state.add_peer(
                     peer_info["virtual_ip"],
                     peer_info["public_key"],
                     peer_info["endpoint_ip"],
                     peer_info["endpoint_port"]
                 )
-                print(f"[Gossip] Added new peer: {peer_ip} -> {peer_info}\n")
-                print(self.state.get_config())
+                print(f"[Gossip] Added new peer: {peer_ip}")
+                # print(self.state.get_config())
                 reload_required = True
             else:
                 if self.check_individual_peer_change(peer_info, existing_peer):
                     reload_required = True
 
+        # print(f"[Gossip] Checked for changes in peers HALFWAY")
         # check for deleted peers - make a copy to avoid dict size change during iteration
         existing_peers_copy = list(self.state.peers.items())
         for existing_peer_ip, existing_peer_info in existing_peers_copy:
             if existing_peer_ip not in self.peers.keys():
                 self.state.remove_peer(existing_peer_ip)
-                print(f"[Gossip] Removed peer: {existing_peer_ip} -> {existing_peer_info}\n")
-                print(self.state.get_config())
+                print(f"[Gossip] Removed peer: {existing_peer_ip}\n")
                 reload_required = True
         if reload_required:
             self.state.reload_config()
-
+        # print(f"[Gossip] Finished checking for changes in peers RELEASE LOCK")
         self.state.lock_release()
         
         

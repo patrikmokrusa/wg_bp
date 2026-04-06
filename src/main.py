@@ -37,6 +37,7 @@ def join_direct(args):
         sync_info = dis.startJoin(args.target_host, sync_port=args.sync_port) # this arg is used for MQ i need to pass it here
     except Exception as e:
         print(f"Error during JOIN: {e}")
+        state.disableNetlink()
         exit(1)
 
 
@@ -52,9 +53,9 @@ def join_direct(args):
     elif sync_info["sync-type"] == "ALL":
         print("Joining network with all synchronization methods enabled...")
         dht_info, gossip_info, mq_info = AllSync.splitInfo(sync_info)
+        sync_mq = MessageQueueSync(state, seed_node=mq_info["sync-seed"], port=args.sync_port, interval=args.change_check_interval)
         sync_dht = SyncDHT(state, seed_node=(dht_info["sync-ip"], dht_info["sync-port"]), port=args.sync_port-1)
         sync_gossip = SyncGossip(state, seed_node=gossip_info["sync-seed"], port=args.sync_port+1)
-        sync_mq = MessageQueueSync(state, seed_node=mq_info["sync-seed"], port=args.sync_port, interval=args.change_check_interval)
         sync = AllSync(state, [sync_dht, sync_gossip, sync_mq])
         
     return state, sync, args.run
@@ -73,6 +74,7 @@ def broadcast_discover(args):
         sync_info = dis.startJoin(sync_port=args.sync_port) # this arg is used for MQ i need to pass it here
     except Exception as e:
         print(f"Error during JOIN: {e}")
+        state.disableNetlink()
         exit(1)
 
     state.write_config()
@@ -87,9 +89,9 @@ def broadcast_discover(args):
     elif sync_info["sync-type"] == "ALL":
         print("Joining network with all synchronization methods enabled...")
         dht_info, gossip_info, mq_info = AllSync.splitInfo(sync_info)
+        sync_mq = MessageQueueSync(state, seed_node=mq_info["sync-seed"], port=args.sync_port, interval=args.change_check_interval)
         sync_dht = SyncDHT(state, seed_node=(dht_info["sync-ip"], dht_info["sync-port"]), port=args.sync_port-1)
         sync_gossip = SyncGossip(state, seed_node=gossip_info["sync-seed"], port=args.sync_port+1)
-        sync_mq = MessageQueueSync(state, seed_node=mq_info["sync-seed"], port=args.sync_port, interval=args.change_check_interval)
         sync = AllSync(state, [sync_dht, sync_gossip, sync_mq])
         
     return state, sync, args.run
@@ -139,9 +141,9 @@ def create(args):
         sync = MessageQueueSync(state, seed_node=None, port=args.sync_port, interval=args.change_check_interval)
     elif args.sync == "ALL":
         print("Creating network with all synchronization methods enabled...")
+        sync_mq = MessageQueueSync(state, seed_node=None, port=args.sync_port+2, interval=args.change_check_interval)
         sync_dht = SyncDHT(state, port=args.sync_port, interval=args.change_check_interval)
         sync_gossip = SyncGossip(state, port=args.sync_port+1)
-        sync_mq = MessageQueueSync(state, seed_node=None, port=args.sync_port+2, interval=args.change_check_interval)
         sync = AllSync(state, [sync_dht, sync_gossip, sync_mq])
     else:
         print("Unsupported synchronization method specified.")
@@ -178,6 +180,8 @@ def main():
 - advertise : Advertise direct joinability using DNSSD
 - help : Show this help message
 - info : Show current state information
+- ping : Ping all peers in the network
+- stun : Get public IP and port using STUN (for testing)
 """
     print(help_msg)
     while run_flag:
@@ -274,6 +278,14 @@ def main():
             # testing feature
             seconds = input("seconds to wait: ")
             time.sleep(int(seconds))
-    
+        elif input_val == "hang":
+            while True:
+                time.sleep(1)
+        
+        elif input_val == "stun":
+            state.netlinkDown()
+            public_ip, public_port = state.get_public_ip()
+            print(f"Public IP: {public_ip}, Public Port: {public_port}")
+            state.netlinkUp()
 if __name__ == "__main__":
     main()

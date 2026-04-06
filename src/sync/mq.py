@@ -1,5 +1,6 @@
 import json
 import threading
+import time
 import zmq
 import asyncio
 from .base import SyncBase
@@ -47,6 +48,9 @@ class MessageQueueSync(SyncBase):
         self.loop_thread.start()
         self.createTask(self._async_init(seed_node=seed_node))
 
+        if seed_node:
+            self.createTask(self.ready_event.wait()).result()
+
     async def _async_init(self, seed_node: dict | None = None) -> None:
         self.terminate_event = asyncio.Event()
         self.listen_task = asyncio.create_task(self._listenForUpdates())
@@ -63,6 +67,7 @@ class MessageQueueSync(SyncBase):
                     pass
 
     async def _listenForUpdates(self) -> None:
+        self_fix_cnt = 0
         while not self.terminate_event.is_set():
             try:
                 msg = self.sub.recv_string(flags=zmq.NOBLOCK)
@@ -81,6 +86,8 @@ class MessageQueueSync(SyncBase):
 
                         self.version = data["version"]
                         self.peers = data["state"]
+                        self.checkForChanges()
+
                     elif data["version"] < self.version:
                         print(f"[MQ] Received outdated {data['type']} from peer {data['from']}. Sending them our state")
                         self.publishState()
@@ -92,12 +99,22 @@ class MessageQueueSync(SyncBase):
                     print(f"[MQ] Received {data['type']} from peer {data['from']}.")
                     del self.peers[data["virtual_ip"]]
                     self.version += 1
+                    self.checkForChanges()
+
                 elif data["type"] == ONBOARD_NOTICE:
                     print(f"[MQ] Received {data['type']} from peer {data['from']}.")
                     self.publishState()
 
-                self.checkForChanges()
+                
             except zmq.Again:
+                self_fix_cnt += 1
+                if self_fix_cnt >= 50:
+                    self_fix_cnt = 0
+                    for peer_ip in self.peers.keys():
+                        if peer_ip == self.state.ip:
+                            continue
+                        if peer_ip not in self.state.peers.keys():
+                          print(f"[MQ] Self-fix: Removing peer {peer_ip} which is not in state peers")
                 await asyncio.sleep(self.interval)
 
     def publishChange(self, virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int, sync_port: int | None = None) -> None:
@@ -131,12 +148,10 @@ class MessageQueueSync(SyncBase):
         
         self.pub.send_string(json.dumps(msg))
 
-    def createTask(self, awaitable: asyncio.coroutine) -> asyncio.Future:
-        """Create a task in the event loop"""
+    def createTask(self, awaitable):
         return asyncio.run_coroutine_threadsafe(awaitable, self.loop)
     
     def _run_loop(self):
-        """Run the event loop"""
         asyncio.set_event_loop(self.loop)
         self.loop.run_forever()
 
@@ -152,7 +167,10 @@ class MessageQueueSync(SyncBase):
         return info
 
     def checkForChanges(self) -> None:
-        self.state.lock_aquire()
+
+        print("[MQ] BEFORE LOCK")
+        self.state.lock_aquire(self)
+        print(f"[MQ] Checking for changes in peers {self.peers.keys()} vs state peers {self.state.peers.keys()}...")
 
         reload_required = False
         for peer_ip, peer_info in self.peers.items():
@@ -167,7 +185,7 @@ class MessageQueueSync(SyncBase):
                     peer_info["endpoint_port"]
                 )
                 self.sub.connect(f"tcp://{peer_info['virtual_ip']}:{peer_info['sync_port']}")
-                print(f"[MQ] Added new peer: {peer_ip} -> {peer_info}\n")
+                print(f"[MQ] Added new peer: {peer_ip}")
                 print(self.state.get_config())
                 reload_required = True
             else:
@@ -179,13 +197,14 @@ class MessageQueueSync(SyncBase):
         for existing_peer_ip, existing_peer_info in existing_peers_copy:
             if existing_peer_ip not in self.peers.keys():
                 self.state.remove_peer(existing_peer_ip)
-                print(f"[MQ] Removed peer: {existing_peer_ip} -> {existing_peer_info}\n")
+                print(f"[MQ] Removed peer: {existing_peer_ip}")
+                print(self.state.get_config())
                 reload_required = True
 
         if reload_required:
             self.state.reload_config()
-            print(f"[MQ] syn peers: {self.peers}")
-            print(self.state.get_config())
+            # print(f"[MQ] syn peers: {self.peers}")
+            # print(self.state.get_config())
 
         self.state.lock_release()
 
@@ -197,6 +216,8 @@ class MessageQueueSync(SyncBase):
         }
         print(f"[MQ] Publishing departure notice")
         self.pub.send_string(json.dumps(msg))
+        time.sleep(1) # give some time for message to be sent before shutting down sockets
+        
 
 
     def exitSync(self) -> None:
@@ -204,7 +225,7 @@ class MessageQueueSync(SyncBase):
         self.publishLastMessage()
         self.terminate_event.set()
         self.listen_task.cancel()
-        self.pub.close()
         self.sub.close()
-        self.pub_context.term()
         self.sub_context.term()
+        self.pub.close()
+        self.pub_context.term()

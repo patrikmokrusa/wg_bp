@@ -1,7 +1,5 @@
-git+https://github.com/dakk/kad.py.git#egg=kad.py
 kademlia
-aiostun
-libp2p
+pystun3
 pyzmq
 zeroconf
 pythonping
