@@ -218,15 +218,11 @@ class SyncDHT(SyncBase):
                     print(f"[DHT] Removed peer from DHT: {key} ")
                     change_happened = True
                     continue
-                print(f"[DHT] 1")
-            print(f"[DHT] 2")
 
             if peer_info == None:
                 continue
             if self.check_individual_peer_change(peer_info, existing_peer):
                 change_happened = True
-        #     print(f"[DHT] 2.5")
-        # print(f"[DHT] 3")
         if change_happened:
             self.state.reload_config()
         

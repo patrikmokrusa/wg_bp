@@ -107,8 +107,9 @@ class MessageQueueSync(SyncBase):
 
                 
             except zmq.Again:
+                # print(f"[MQ] zmq.Again")
                 self_fix_cnt += 1
-                if self_fix_cnt >= 50:
+                if self_fix_cnt >= 2: # every 20s
                     self_fix_cnt = 0
                     for peer_ip in self.peers.keys():
                         if peer_ip == self.state.ip:
@@ -168,9 +169,9 @@ class MessageQueueSync(SyncBase):
 
     def checkForChanges(self) -> None:
 
-        print("[MQ] BEFORE LOCK")
+        # print("[MQ] BEFORE LOCK")
         self.state.lock_aquire(self)
-        print(f"[MQ] Checking for changes in peers {self.peers.keys()} vs state peers {self.state.peers.keys()}...")
+        # print(f"[MQ] Checking for changes in peers {self.peers.keys()} vs state peers {self.state.peers.keys()}...")
 
         reload_required = False
         for peer_ip, peer_info in self.peers.items():
@@ -185,8 +186,8 @@ class MessageQueueSync(SyncBase):
                     peer_info["endpoint_port"]
                 )
                 self.sub.connect(f"tcp://{peer_info['virtual_ip']}:{peer_info['sync_port']}")
-                print(f"[MQ] Added new peer: {peer_ip}")
-                print(self.state.get_config())
+                # print(f"[MQ] Added new peer: {peer_ip}")
+                # print(self.state.get_config())
                 reload_required = True
             else:
                 if self.check_individual_peer_change(peer_info, existing_peer):

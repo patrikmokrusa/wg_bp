@@ -36,8 +36,6 @@ if [ "$1" == "prep" ]; then
     $BUILD_STUN
     echo "$BUILD_WG"
     $BUILD_WG
-    echo "$CREATE_NET"
-    $CREATE_NET
 fi
 
 if [ "$1" == "delete" ]; then
