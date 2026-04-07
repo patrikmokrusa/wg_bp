@@ -63,7 +63,9 @@ class SyncGossip(SyncBase):
         if msg["version"] == 0:
             # onboarding
             new_peer = msg["state"][from_ip]
-            self.peers[new_peer["virtual_ip"]] = new_peer
+
+            # update only port
+            self.peers[new_peer["virtual_ip"]]["sync_port"] = new_peer["sync_port"]
             print(f"[Gossip] Onboarded new peer: {new_peer['virtual_ip']}")
             self.version += 1
             await self._sendStateToPeer(from_ip, from_port)
@@ -77,6 +79,7 @@ class SyncGossip(SyncBase):
             print(f"[Gossip] Received state update from peer {from_ip}:{from_port}.")
             self.version = msg["version"]
             self.peers = msg["state"]
+            print(f"[Gossip] recieved state: {self.peers} version: {self.version}")
             self.checkForChanges()
 
         if msg["type"] == DEPARTURE_NOTICE:
@@ -195,7 +198,7 @@ class SyncGossip(SyncBase):
         if virtual_ip == self.state.ip:
             self.peers[virtual_ip]["sync_port"] = self.port
 
-        # print(f"[Gossip] Successfully published change: {msg}")
+        # print(f"[Gossip] Successfully published change: {self.peers} version: {self.version}")
 
 
     async def _sendLastGossip(self) -> None:
@@ -267,7 +270,6 @@ class SyncGossip(SyncBase):
     def checkForChanges(self) -> None:
         self.state.lock_aquire(self)
         # print(f"[Gossip] Checking for changes in peers")
-        reload_required = False
         for peer_ip, peer_info in self.peers.items():
             existing_peer = self.state.peers.get(peer_ip)
             if not existing_peer:
@@ -280,8 +282,6 @@ class SyncGossip(SyncBase):
                     peer_info["endpoint_port"]
                 )
                 print(f"[Gossip] Added new peer: {peer_ip}")
-                # print(self.state.get_config())
-                reload_required = True
             else:
                 if self.check_individual_peer_change(peer_info, existing_peer):
                     reload_required = True
@@ -293,9 +293,6 @@ class SyncGossip(SyncBase):
             if existing_peer_ip not in self.peers.keys():
                 self.state.remove_peer(existing_peer_ip)
                 print(f"[Gossip] Removed peer: {existing_peer_ip}\n")
-                reload_required = True
-        if reload_required:
-            self.state.reload_config()
         # print(f"[Gossip] Finished checking for changes in peers RELEASE LOCK")
         self.state.lock_release()
         

@@ -80,9 +80,11 @@ class DiscoveryJoin(DiscoveryBase):
         if type != "JOIN":
             print(f"[JOIN] Invalid discovery type: {type}. Expected 'JOIN'.")
             response = self.get_error_msg("invalid_type")
+            client.send(str(response).encode('utf-8'))
         elif content['ip'] in self.state.peers or content['ip'] == self.state.ip:
             print(f"[JOIN] Peer with IP {content['ip']} already exists. Skipping addition.")
             response = self.get_error_msg("exists")
+            client.send(str(response).encode('utf-8'))
             
         else:
             
@@ -94,7 +96,6 @@ class DiscoveryJoin(DiscoveryBase):
                 content["port"]
             )
 
-            self.state.reload_config()
 
             response = {
                 "type": "JOIN",
@@ -102,16 +103,25 @@ class DiscoveryJoin(DiscoveryBase):
                 "content": self.state.interface_json(),
                 "sync": self.sync.getInfo() 
             }
+            
+            client.send(str(response).encode('utf-8'))
+            
+            # ip, port = self.state.updatePeerAfterHandshake(content["ip"])
+            
+            # print(f"[JOIN*******] new ip: {ip} port: {port}")
 
             self.sync.publishChange(
                 content['ip'],
                 content['public_key'],
+                # ip,
+                # port,
                 content['public_ip'],
                 content['port'],
                 content['sync_port']
             )
-            
-        client.send(str(response).encode('utf-8'))
+
+            client.send(b"OK")  # confirmation because gossip
+
         client.close()
 
     def parse_response_msg(self, msg_str: str) -> tuple:
@@ -149,6 +159,9 @@ class DiscoveryJoin(DiscoveryBase):
                 content["public_ip"],
                 content ["port"]
             )
+
+            ok = sock.recv(1024)  # wait for confirmation because gossip
+            print(f"[*] Received confirmation: {ok.decode('utf-8')}")
 
             return sync
 

@@ -22,6 +22,7 @@ def add_common_args(p):
     p.add_argument('--interface', type=str, default='wg0', help='Network interface name')
     p.add_argument('--sync-port', type=int, default=6881, help='Port for synchronization service')
     p.add_argument('--change-check-interval', type=int, default=10, help='Interval to check for changes in seconds')
+    p.add_argument('--forwarded-port', action='store_true', help='Is the port forwarded?')
 
 join_parser = subparsers.add_parser('join', help='Join an existing network')
 join_parser.add_argument('target_host', type=str, help='Target host to join')
@@ -41,8 +42,6 @@ def join_direct(args):
         exit(1)
 
 
-    state.write_config()
-    state.load_config()
 
     if sync_info["sync-type"] == "DHT":
         sync = SyncDHT(state, seed_node=(sync_info["sync-ip"], sync_info["sync-port"]), port=args.sync_port)
@@ -77,8 +76,6 @@ def broadcast_discover(args):
         state.disableNetlink()
         exit(1)
 
-    state.write_config()
-    state.load_config()
 
     if sync_info["sync-type"] == "DHT":
         sync = SyncDHT(state, seed_node=(sync_info["sync-ip"], sync_info["sync-port"]), port=args.sync_port)
@@ -128,9 +125,10 @@ create_parser.add_argument('--sync', required=True, type=str, help='Synchronizat
 create_parser.set_defaults(func='create')
 
 def create(args):
-    state = State(args.ip, port=args.port, interface=args.interface)
-    state.write_config()
-    state.load_config()
+    f_port = None
+    if args.forwarded_port:
+        f_port = args.port
+    state = State(args.ip, port=args.port, interface=args.interface, forwarded_port=f_port)
     
     sync = None
     if args.sync == "DHT":
@@ -198,7 +196,6 @@ def main():
                 except Exception as e:
                     print(f"Error occurred while stopping discovery: {e}")
             sync.exitSync()
-            state.disable_config()
             state.disableNetlink()
             if ad:
                 ad.stopAdvertise()
@@ -281,6 +278,9 @@ def main():
         elif input_val == "hang":
             while True:
                 time.sleep(1)
+
+        elif input_val == "ping":
+            state.ping_all_peers()
         
         elif input_val == "stun":
             state.netlinkDown()

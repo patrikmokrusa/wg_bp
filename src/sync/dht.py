@@ -177,7 +177,6 @@ class SyncDHT(SyncBase):
     def checkForCHanges(self) -> None:
         self.state.lock_aquire(self)
         # print(f"[DHT] Checking for changes in DHT... START")
-        change_happened = False
 
         key_list = self._getValueSync(KEY_LIST_KEY)
         # print(f"[DHT*****] Current key list from DHT: {key_list}")
@@ -206,25 +205,18 @@ class SyncDHT(SyncBase):
                     peer_info["endpoint_port"]
                 )
                 print(f"[DHT] Added new peer: {peer_info['virtual_ip']} -> {peer_info}")
-                change_happened = True
                 continue
             
             except TypeError:
                 # Peer has been removed from DHT
-                # print(f"[DHT] tady se to zkurvilo")
-                # print(f"[DHT] {key} self.state.peers.keys() {self.state.peers.keys()}")
                 if key in self.state.peers.keys():
                     self.state.remove_peer(key)
-                    print(f"[DHT] Removed peer from DHT: {key} ")
-                    change_happened = True
+                    print(f"[DHT] Removed peer from DHT: {key}")
                     continue
 
             if peer_info == None:
                 continue
-            if self.check_individual_peer_change(peer_info, existing_peer):
-                change_happened = True
-        if change_happened:
-            self.state.reload_config()
+            self.check_individual_peer_change(peer_info, existing_peer)
         
         # print(f"[DHT] Finished checking for changes in DHT... END")
         self.state.lock_release()

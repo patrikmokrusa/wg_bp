@@ -8,6 +8,7 @@ REMOVE_NET="docker network rm mynet"
 DELETE_CONTAINERS="docker rm -f create_peer join_peer bcast_peer dnssd_peer stun"
 
 RUN_STUN="docker run -d --privileged --network host --name stun wg-stun"
+# RUN_STUN="docker run -d --privileged -p 9999:9999/udp --name stun wg-stun"
 RUN_CREATE_PEER="docker run -d --entrypoint /bin/bash --privileged --network=mynet \
     --name create_peer wg-bp \
     /app/test/create_script.sh $2"
@@ -58,13 +59,14 @@ if [ "$1" == "all" ]; then
     $RUN_STUN 
     echo "$RUN_CREATE_PEER"
     $RUN_CREATE_PEER
+    sleep 5
     echo "$RUN_JOIN_PEER"
     $RUN_JOIN_PEER
     echo "$RUN_BCAST_PEER"
     $RUN_BCAST_PEER
 
     echo "Need some time to start dnssd discovery, waiting 15 seconds..."
-    sleep 15
+    sleep 10
     
     echo "$RUN_DNSSD_PEER"
     $RUN_DNSSD_PEER
@@ -94,4 +96,14 @@ if [ "$1" == "create" ]; then
 
     echo "$RUN_CREATE_PEER"
     $RUN_CREATE_PEER
+fi
+
+if [ "$1" == "stun" ]; then
+    echo "$RUN_STUN"
+    $RUN_STUN 
+fi
+
+if [ "$1" == "net" ]; then
+    echo "$CREATE_NET"
+    $CREATE_NET
 fi

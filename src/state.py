@@ -3,6 +3,7 @@ import json
 
 
 import subprocess
+import time
 import urllib
 import stun
 from pythonping import ping
@@ -16,21 +17,25 @@ STUN_SERVERS = [
     ("stun1.l.google.com", 19302),
 ]
 
+CUSTOM_STUN_PORT = 9999
+
 CUSTOM_STUN_SERVERS = [
-    ("stun", 9999),
-    ("host.docker.internal", 9999),
-    ("127.0.0.1", 9999),
-    ("172.18.0.1", 9999),
+    # ("stun", CUSTOM_STUN_PORT), # stun container in same network
+    ("host.docker.internal", CUSTOM_STUN_PORT), # stun container
+    # ("127.0.0.1", CUSTOM_STUN_PORT), # localhost
+    ("172.18.0.1", CUSTOM_STUN_PORT), # docker no fw
+    ("10.10.2.104", CUSTOM_STUN_PORT), # host machine
 ]
 
 class State:
-    def __init__(self, ip: str, port: int = 51820, interface: str = "wg0", keepalive: int = 25) -> None:
+    def __init__(self, ip: str, port: int = 51820, interface: str = "wg0", keepalive: int = 25, forwarded_port: int | None = None) -> None:
         self.private_key = None
         self._gen_private_key()
         self.public_key = None
         self._gen_public_key()
         self.ip = ip
         self.port = port
+        self.forwarded_port = forwarded_port
         self.peers = {} # peer_virtual_ip: {public_key : key_str, endpoint_ip : endpoint_str}
         self.interface = interface
         self.keepalive = keepalive
@@ -71,6 +76,40 @@ class State:
             private_key=self.private_key,
             listen_port=self.port
         )
+
+    def updatePeerAfterHandshake(self, virtual_ip: str) -> tuple:
+        wg = WireGuard()
+        # print(f"[*****STATE] Waiting for handshake completion with peer {virtual_ip}")
+
+        wait = True
+        while wait:
+            info = wg.info(self.interface)
+            attrs = info[0]['attrs']
+            attrs = dict(attrs)
+            
+            peers = attrs['WGDEVICE_A_PEERS']
+            for peer in peers:
+                peer_attrs = dict(peer['attrs'])
+                if f"{virtual_ip}/32" in peer_attrs["WGPEER_A_ALLOWEDIPS"][0]['addr']:
+                    if peer_attrs["WGPEER_A_RX_BYTES"] == 0:
+                        print(f"[STATE] Handshake with peer {virtual_ip} not completed yet. Waiting...")
+                        time.sleep(0.1)
+                        continue
+                    endpoint = peer_attrs['WGPEER_A_ENDPOINT']
+                    addr = endpoint['addr']
+                    port = endpoint['port']
+                    self.peers[virtual_ip]["endpoint_ip"] = addr
+                    self.peers[virtual_ip]["endpoint_port"] = port
+                    wait = False
+                    print(f"[STATE] Updated peer {virtual_ip} endpoint to {endpoint['addr']}:{endpoint['port']}")
+                    break
+
+        wg.close()
+
+        return addr, port
+
+            
+
 
     def _wg_set(self, interface, **kwargs) -> None:
         loop = asyncio.new_event_loop()
@@ -118,27 +157,32 @@ class State:
         print("[STATE] CUSTOM STUN")
 
         for stun_host, stun_port in CUSTOM_STUN_SERVERS:
-                
+            print(f"[STATE] Trying custom STUN server {stun_host}:{stun_port}...")
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock.settimeout(3)
-            sock.bind(("", self.port))
+            sock.bind(("0.0.0.0", self.port))
             try:
                 sock.sendto(b"STUN request", (stun_host, stun_port))
                 data, addr = sock.recvfrom(1024)
                 print(f"[STATE] Received STUN response: {data.decode('utf-8')} from {addr[0]}:{addr[1]}")
                 response = json.loads(data.decode('utf-8'))
                 self.public_ip = response['ip']
-                self.public_port = response['port']
+                if self.forwarded_port:
+                    self.public_port = self.forwarded_port
+                else:
+                    self.public_port = response['port']
                 sock.close()
                 return
             except Exception as e:
+                sock.close()
                 pass
         
         print(f"[STATE] Custom STUN failed.")
-        sock.close()
 
         try:
             self.public_ip, self.public_port = self.get_public_ip()
+            if self.forwarded_port:
+                self.public_port = self.forwarded_port  
         except Exception as e:
             print(f"[STATE] Error occurred while fetching public IP: {e}")
             exit(1)
@@ -173,7 +217,7 @@ class State:
         )
         print(self.get_config())
         print(f"[STATE] Added peer {peer_virtual_ip}")
-        self.ping_all_peers()
+        # self.ping_all_peers()
 
     def _getAllowedIPs(self, peer_virtual_ip: str) -> list:
         allowed_ips = []
@@ -220,25 +264,12 @@ class State:
         
         return config
 
-    def write_config(self)-> None:
-        return
-        filename = f"/etc/wireguard/{self.interface}.conf"
-        with open(filename  , "w") as f:
-            f.write(self.get_config())
-
-    def load_config(self)-> None:
-        return
-        print(self.get_config())
-        subprocess.run(["wg-quick", "up", self.interface])
-        self.ping_all_peers()
 
     def ping_all_peers(self)-> None:
         for peer_ip in self.peers.keys():
-            ping(peer_ip, verbose=False, count=3, timeout=0)
+            print(f"[STATE] Pinging peer {peer_ip}")
+            ping(peer_ip, verbose=True, count=2, timeout=0.5)
 
-    def disable_config(self)-> None:
-        return
-        subprocess.run(["wg-quick", "down", self.interface])
     
     def disableNetlink(self):
         idx = self.ipr.link_lookup(ifname=self.interface)[0]
@@ -258,12 +289,6 @@ class State:
 
     
 
-    def reload_config(self)-> None:
-        return
-        #TODO: use wg strip
-        self.disable_config()
-        self.write_config()
-        self.load_config()
 
     def interface_json(self)-> dict:
         return {

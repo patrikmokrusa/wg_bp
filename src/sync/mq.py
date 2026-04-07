@@ -99,6 +99,7 @@ class MessageQueueSync(SyncBase):
                     print(f"[MQ] Received {data['type']} from peer {data['from']}.")
                     del self.peers[data["virtual_ip"]]
                     self.version += 1
+                    self.selfFix() # so i dont add back deleted peers by other modules in ALL sync
                     self.checkForChanges()
 
                 elif data["type"] == ONBOARD_NOTICE:
@@ -107,16 +108,20 @@ class MessageQueueSync(SyncBase):
 
                 
             except zmq.Again:
-                # print(f"[MQ] zmq.Again")
-                self_fix_cnt += 1
-                if self_fix_cnt >= 2: # every 20s
-                    self_fix_cnt = 0
-                    for peer_ip in self.peers.keys():
-                        if peer_ip == self.state.ip:
-                            continue
-                        if peer_ip not in self.state.peers.keys():
-                          print(f"[MQ] Self-fix: Removing peer {peer_ip} which is not in state peers")
+                # # print(f"[MQ] zmq.Again")
+                # self_fix_cnt += 1
+                # if self_fix_cnt >= 2: # every 20s
+                #     self_fix_cnt = 0
+                #     self.selfFix()
                 await asyncio.sleep(self.interval)
+
+    def selfFix(self) -> None:
+        for peer_ip in self.peers.keys():
+            if peer_ip == self.state.ip:
+                continue
+            if peer_ip not in self.state.peers.keys():
+                print(f"[MQ] Self-fix: Removing peer {peer_ip} which is not in state peers")
+                del self.peers[peer_ip]
 
     def publishChange(self, virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int, sync_port: int | None = None) -> None:
         self.peers[virtual_ip] = {
@@ -173,7 +178,6 @@ class MessageQueueSync(SyncBase):
         self.state.lock_aquire(self)
         # print(f"[MQ] Checking for changes in peers {self.peers.keys()} vs state peers {self.state.peers.keys()}...")
 
-        reload_required = False
         for peer_ip, peer_info in self.peers.items():
             if peer_ip == self.state.ip:
                 continue
@@ -186,26 +190,17 @@ class MessageQueueSync(SyncBase):
                     peer_info["endpoint_port"]
                 )
                 self.sub.connect(f"tcp://{peer_info['virtual_ip']}:{peer_info['sync_port']}")
-                # print(f"[MQ] Added new peer: {peer_ip}")
-                # print(self.state.get_config())
-                reload_required = True
+                print(f"[MQ] Added new peer: {peer_ip}")
+
             else:
                 if self.check_individual_peer_change(peer_info, existing_peer):
                     print(f"[MQ] Detected change in peer {peer_ip}")
-                    reload_required = True
 
         existing_peers_copy = list(self.state.peers.items())
         for existing_peer_ip, existing_peer_info in existing_peers_copy:
             if existing_peer_ip not in self.peers.keys():
                 self.state.remove_peer(existing_peer_ip)
                 print(f"[MQ] Removed peer: {existing_peer_ip}")
-                print(self.state.get_config())
-                reload_required = True
-
-        if reload_required:
-            self.state.reload_config()
-            # print(f"[MQ] syn peers: {self.peers}")
-            # print(self.state.get_config())
 
         self.state.lock_release()
 

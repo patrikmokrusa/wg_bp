@@ -72,7 +72,6 @@ class DiscoveryBroadcast(DiscoveryBase):
                     content["port"]
                     )
                 
-                self.state.reload_config()
 
                 response = {
                     "type": JOIN_RESPONSE,
