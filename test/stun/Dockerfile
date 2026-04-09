@@ -9,4 +9,4 @@ RUN apt-get update
 RUN apt-get install -y iputils-ping
 RUN apt install -y iproute2
 
-CMD [ "python3", "-u", "stun.py" ]
+CMD [ "python3", "-u", "stun.py"]

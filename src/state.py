@@ -20,6 +20,7 @@ STUN_SERVERS = [
 CUSTOM_STUN_PORT = 9999
 
 CUSTOM_STUN_SERVERS = [
+    ("172.20.0.10", CUSTOM_STUN_PORT), # TRUELY NATED DOCKER COMPOSE
     # ("stun", CUSTOM_STUN_PORT), # stun container in same network
     ("host.docker.internal", CUSTOM_STUN_PORT), # stun container
     # ("127.0.0.1", CUSTOM_STUN_PORT), # localhost
@@ -65,7 +66,7 @@ class State:
 
         self._wgInit()
 
-        self.ipr.link("set", index=idx, state="up")
+        self.ipr.link("set", index=idx, mtu=1420, state="up")
 
     
     def _wgInit(self) -> None:
@@ -98,8 +99,8 @@ class State:
                     endpoint = peer_attrs['WGPEER_A_ENDPOINT']
                     addr = endpoint['addr']
                     port = endpoint['port']
-                    self.peers[virtual_ip]["endpoint_ip"] = addr
-                    self.peers[virtual_ip]["endpoint_port"] = port
+                    # self.peers[virtual_ip]["endpoint_ip"] = addr
+                    # self.peers[virtual_ip]["endpoint_port"] = port
                     wait = False
                     print(f"[STATE] Updated peer {virtual_ip} endpoint to {endpoint['addr']}:{endpoint['port']}")
                     break

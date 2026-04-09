@@ -11,6 +11,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 RUN apt-get update && apt-get install -y wireguard
 RUN apt-get install -y iputils-ping
 RUN apt install -y iproute2
+RUN apt install -y tcpdump
 
 RUN chmod +x /app/test/create_script.sh
 RUN chmod +x /app/test/join_direct_script.sh

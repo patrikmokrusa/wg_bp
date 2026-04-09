@@ -1,0 +1,138 @@
+
+networks:
+  public_net:
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
+  lan_a:
+    ipam:
+      config:
+        - subnet: 192.168.1.0/24
+  lan_b:
+    ipam:
+      config:
+        - subnet: 192.168.2.0/24
+
+
+services:
+  # The "Public" STUN/TURN Server
+  stun-server:
+    build: 
+      context: .
+      dockerfile: test/stun/Dockerfile
+    networks:
+      public_net:
+        ipv4_address: 172.20.0.10
+
+  create-peer:
+    build: 
+      context: .
+      dockerfile: test/Dockerfile
+    privileged: true
+    command: >
+      sh -c "cd src;
+            sleep 3;
+            python3 -u main.py create --run --ip 10.0.0.1 --sync Gossip < ../test/create-scenario.txt;
+            tail -f /dev/null"
+    networks:
+      public_net:
+        ipv4_address: 172.20.0.77
+
+  # Router for Side A
+  router-a:
+    build: 
+      context: .
+      dockerfile: Dockerfile.router
+    privileged: true # Required to manipulate iptables
+    # command: >
+    #   sh -c "sysctl -w net.ipv4.ip_forward=1;
+    #          iptables -A FORWARD -j ACCEPT;
+    #          iptables -t nat -A POSTROUTING -o eth1 -j MASQUERADE;
+    #          tcpdump -i any -n udp and host 172.20.0.3
+    #          tail -f /dev/null"
+    command: >
+        sh -c "
+              ip route del default;
+              iptables -t nat -F;
+              iptables -F;
+              iptables -t nat -A PREROUTING -i eth1 -p udp -j DNAT --to-destination 192.168.1.2;
+              iptables -t nat -A POSTROUTING -o eth1 -p udp -j SNAT --to-source 172.20.0.2;
+              iptables -A FORWARD -j ACCEPT;
+              tcpdump -i any -n udp and host 172.20.0.3
+              tail -f /dev/null"
+    networks:
+      public_net:
+        ipv4_address: 172.20.0.2
+      lan_a:
+        ipv4_address: 192.168.1.10
+
+  # Client A (Behind NAT A)
+  client-a:
+    build: 
+      context: .
+      dockerfile: test/Dockerfile
+    privileged: true
+    command: >
+      sh -c "cd src;
+            sleep 10;
+            ip route del default;
+            ip route add default via 192.168.1.10 dev eth0;
+            python3 -u main.py join 172.20.0.77 --port 2020 --run --ip 10.0.0.2 < ../test/join-direct_scenario.txt;
+            tail -f /dev/null"
+    networks:
+      lan_a:
+        ipv4_address: 192.168.1.2
+    depends_on:
+      - router-a
+
+  # Router for Side B
+  router-b:
+    build: 
+      context: .
+      dockerfile: Dockerfile.router
+    privileged: true
+    # command: >
+    #   sh -c "sysctl -w net.ipv4.ip_forward=1;
+    #          iptables -A FORWARD -j ACCEPT;
+    #          iptables -t nat -A POSTROUTING -o eth1 -j MASQUERADE;
+    #          tcpdump -i any -n udp and host 172.20.0.2
+    #          tail -f /dev/null"
+
+    command: >
+        sh -c "
+              ip route del default;
+              iptables -t nat -F;
+              iptables -F;
+              iptables -t nat -A PREROUTING -i eth1 -p udp -j DNAT --to-destination 192.168.2.2;
+              iptables -t nat -A POSTROUTING -o eth1 -p udp -j SNAT --to-source 172.20.0.3;
+              iptables -A FORWARD -j ACCEPT;
+              tcpdump -i any -n udp and host 172.20.0.2;
+              tail -f /dev/null
+              "
+    
+    networks:
+      public_net:
+        ipv4_address: 172.20.0.3
+      lan_b:
+        ipv4_address: 192.168.2.10
+
+  # Client B (Behind NAT B)
+  client-b:
+    build: 
+      context: .
+      dockerfile: test/Dockerfile
+    privileged: true
+    command: >
+      sh -c "cd src;
+            sleep 15;
+            ip route del default;
+            ip route add default via 192.168.2.10;
+            python3 -u main.py join 172.20.0.77 --port 3030 --run --ip 10.0.0.3 < ../test/join-direct_scenario.txt;
+            tail -f /dev/null"
+
+    networks:
+      lan_b:
+        ipv4_address: 192.168.2.2
+    depends_on:
+      - router-b
+

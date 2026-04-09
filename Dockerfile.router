@@ -1,0 +1,4 @@
+FROM alpine:latest
+RUN apk add --no-cache iptables iproute2
+RUN apk add tcpdump
+# This ensures the container stays running
