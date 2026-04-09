@@ -59,14 +59,10 @@ if [ "$1" == "all" ]; then
     $RUN_STUN 
     echo "$RUN_CREATE_PEER"
     $RUN_CREATE_PEER
-    sleep 5
     echo "$RUN_JOIN_PEER"
     $RUN_JOIN_PEER
     echo "$RUN_BCAST_PEER"
     $RUN_BCAST_PEER
-
-    echo "Need some time to start dnssd discovery, waiting 15 seconds..."
-    sleep 10
     
     echo "$RUN_DNSSD_PEER"
     $RUN_DNSSD_PEER

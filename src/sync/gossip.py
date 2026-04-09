@@ -238,6 +238,13 @@ class SyncGossip(SyncBase):
         if self.shutdown_event:
             self.loop.call_soon_threadsafe(self.shutdown_event.set)
         
+        # Wait for gossip task to finish
+        if self.gossip_task:
+            try:
+                self.gossip_task.result(timeout=5)
+            except:
+                pass
+    
         # Send final state
         try:
             self.createTask(self._sendLastGossip()).result(timeout=5)
@@ -248,13 +255,6 @@ class SyncGossip(SyncBase):
         if self.server:
             self.server.close()
         
-        # Wait for gossip task to finish
-        if self.gossip_task:
-            try:
-                self.createTask(asyncio.sleep(1)).result(timeout=5)
-                self.gossip_task.result()
-            except:
-                pass
         
         # Stop loop cleanly
         self.loop.call_soon_threadsafe(self.loop.stop)
