@@ -11,6 +11,10 @@ from pyroute2 import IPRoute, WireGuard
 import threading
 import asyncio
 
+import base64
+from cryptography.hazmat.primitives.asymmetric import x25519
+from cryptography.hazmat.primitives import serialization
+
 STUN_SERVERS = [
     ("stun.l.google.com", 19302),
     ("stunserver2025.stunprotocol.org", 3478),
@@ -32,9 +36,8 @@ CUSTOM_STUN_SERVERS = [
 class State:
     def __init__(self, ip: str, port: int = 51820, interface: str = "wg0", keepalive: int = 25, forwarded_port: int | None = None) -> None:
         self.private_key = None
-        self._gen_private_key()
         self.public_key = None
-        self._gen_public_key()
+        self._gen_key_pair()
         self.ip = ip
         self.port = port
         self.forwarded_port = forwarded_port
@@ -189,18 +192,26 @@ class State:
             print(f"[STATE] Error occurred while fetching public IP: {e}")
             exit(1)
 
-    def _gen_private_key(self)-> None:
-        cli = subprocess.Popen(["wg", "genkey"], stdout=subprocess.PIPE)
-        key = cli.stdout.read().decode("utf-8")
-        self.private_key = key.rstrip("\n")
-        # self.private_key = key
+    def _gen_key_pair(self) -> None:
+        private = x25519.X25519PrivateKey.generate()
+        public = private.public_key()
 
-    
-    def _gen_public_key(self)-> None:
-        cli = subprocess.Popen(["wg", "pubkey"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-        key = cli.communicate(input=self.private_key.encode("utf-8"))[0].decode("utf-8")
-        self.public_key = key.rstrip("\n")
-        # self.public_key = key
+        private_raw = private.private_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PrivateFormat.Raw,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        public_raw = public.public_bytes(
+            encoding=serialization.Encoding.Raw,
+            format=serialization.PublicFormat.Raw,
+        )
+
+        self.private_key = base64.b64encode(private_raw).decode("ascii")
+        self.public_key = base64.b64encode(public_raw).decode("ascii")
+
+
+
+        
 
     def add_peer(self, peer_virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int = 51820) -> None:
         if peer_virtual_ip == self.ip:

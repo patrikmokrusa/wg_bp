@@ -4,3 +4,4 @@ pyzmq
 zeroconf
 pythonping
 pyroute2
+cryptography
