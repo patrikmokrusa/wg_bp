@@ -1,7 +1,7 @@
 #!/bin/bash
 
-BUILD_STUN="docker build -f test/stun/Dockerfile -t wg-stun ."
-BUILD_WG="docker build -f test/Dockerfile -t wg-bp ."
+BUILD_STUN="docker build -f test/stun/Dockerfile.stun -t wg-stun ."
+BUILD_WG="docker build -f test/Dockerfile.main -t wg-bp ."
 CREATE_NET="docker network create mynet"
 REMOVE_NET="docker network rm mynet"
 

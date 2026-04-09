@@ -5,6 +5,6 @@ dis-join
 dis-bcast
 
 advertise
-172.20.0.77
+create_peer
 
 hang
