@@ -24,7 +24,7 @@ services:
         sh -c "
               cd src;
               sleep 10;
-              python3 -u main.py create --run --ip 10.0.0.1 --sync Gossip < ../test/create-scenario.txt
+              python3 -u main.py create --run --ip 10.0.0.1 --sync Gossip < ../test/create-nat-scenario.txt
               tail -f /dev/null"
     network_mode: "none"
 
@@ -51,8 +51,10 @@ services:
     command: >
         sh -c "
               sleep 3;
-              iptables -t nat -A PREROUTING -i eth1 -j DNAT --to-destination 192.168.1.2;
-              iptables -t nat -A POSTROUTING -o eth1 -j SNAT --to-source 172.20.4.2;
+              iptables -t nat -A PREROUTING -i eth1 -p udp -j DNAT --to-destination 192.168.1.2;
+              iptables -t nat -A POSTROUTING -o eth1 -p udp -j SNAT --to-source 172.20.4.2;
+              iptables -t nat -A PREROUTING -i eth1 -p tcp -j DNAT --to-destination 192.168.1.2;
+              iptables -t nat -A POSTROUTING -o eth1 -p tcp -j SNAT --to-source 172.20.4.2;
               iptables -A FORWARD -j ACCEPT;
               tail -f /dev/null"
     network_mode: "none"
@@ -66,7 +68,7 @@ services:
     command: >
       sh -c "cd src;
             sleep 13;
-            python3 -u main.py join 172.20.3.2 --port 2020 --run --ip 10.0.0.2 < ../test/join-direct_scenario.txt;
+            python3 -u main.py join 172.20.3.2 --port 2020 --run --ip 10.0.0.2 < ../test/join-hang_scenario.txt;
             tail -f /dev/null"
     network_mode: "none"
 
@@ -81,8 +83,10 @@ services:
     command: >
         sh -c "
               sleep 3;
-              iptables -t nat -A PREROUTING -i eth1 -j DNAT --to-destination 192.168.2.2;
-              iptables -t nat -A POSTROUTING -o eth1 -j SNAT --to-source 172.20.1.2;
+              iptables -t nat -A PREROUTING -i eth1 -p udp -j DNAT --to-destination 192.168.2.2;
+              iptables -t nat -A POSTROUTING -o eth1 -p udp -j SNAT --to-source 172.20.1.2;
+              iptables -t nat -A PREROUTING -i eth1 -p tcp -j DNAT --to-destination 192.168.2.2;
+              iptables -t nat -A POSTROUTING -o eth1 -p tcp -j SNAT --to-source 172.20.1.2;
               iptables -A FORWARD -j ACCEPT;
               tail -f /dev/null"
     network_mode: "none"
@@ -96,7 +100,7 @@ services:
     command: >
       sh -c "cd src;
             sleep 16;
-            python3 -u main.py join 172.20.3.2 --port 3030 --run --ip 10.0.0.3 < ../test/join-direct_scenario.txt;
+            python3 -u main.py join 172.20.3.2 --port 3030 --run --ip 10.0.0.3 < ../test/join-hang_scenario.txt;
             tail -f /dev/null"
     network_mode: "none"
 

@@ -105,9 +105,8 @@ class DiscoveryJoin(DiscoveryBase):
             }
             
             client.send(str(response).encode('utf-8'))
-            
             # ip, port = self.state.updatePeerAfterHandshake(content["ip"])
-            
+            client.recv(1024)
             # print(f"[JOIN*******] new ip: {ip} port: {port}")
 
             self.sync.publishChange(
@@ -159,7 +158,7 @@ class DiscoveryJoin(DiscoveryBase):
                 content["public_ip"],
                 content ["port"]
             )
-
+            sock.send(b"OK")
             ok = sock.recv(1024)  # wait for confirmation because gossip
             print(f"[*] Received confirmation: {ok.decode('utf-8')}")
 
