@@ -46,16 +46,26 @@ services:
       context: .
       dockerfile: test/Dockerfile.router
     privileged: true
+    # # full cone NAT
     # command: >
-    #     sh -c "tail -f /dev/null"
+    #     sh -c "
+    #           sleep 3;
+    #           iptables -A FORWARD -j ACCEPT;
+    #           iptables -t nat -A PREROUTING -i eth1 -p udp -j DNAT --to-destination 192.168.1.2;
+    #           iptables -t nat -A POSTROUTING -o eth1 -p udp -j SNAT --to-source 172.20.4.2;
+    #           iptables -t nat -A PREROUTING -i eth1 -p tcp -j DNAT --to-destination 192.168.1.2;
+    #           iptables -t nat -A POSTROUTING -o eth1 -p tcp -j SNAT --to-source 172.20.4.2;
+    #           tail -f /dev/null"
+
+    # restricted cone NAT
     command: >
         sh -c "
               sleep 3;
-              iptables -t nat -A PREROUTING -i eth1 -p udp -j DNAT --to-destination 192.168.1.2;
-              iptables -t nat -A POSTROUTING -o eth1 -p udp -j SNAT --to-source 172.20.4.2;
-              iptables -t nat -A PREROUTING -i eth1 -p tcp -j DNAT --to-destination 192.168.1.2;
-              iptables -t nat -A POSTROUTING -o eth1 -p tcp -j SNAT --to-source 172.20.4.2;
               iptables -A FORWARD -j ACCEPT;
+              iptables -t nat -A PREROUTING -i eth1 -j DNAT --to-destination 192.168.1.2;
+              iptables -t nat -A POSTROUTING -o eth1 -j SNAT --to-source 172.20.4.2;
+              iptables -A INPUT -i eth1 -m state --state ESTABLISHED,RELATED -j ACCEPT;
+              iptables -A INPUT -i eth1 -m state --state NEW -j DROP;
               tail -f /dev/null"
     network_mode: "none"
 
@@ -78,16 +88,26 @@ services:
       context: .
       dockerfile: test/Dockerfile.router
     privileged: true
+    # # full cone NAT
     # command: >
-    #     sh -c "tail -f /dev/null"
+    #     sh -c "
+    #           sleep 3;
+    #           iptables -A FORWARD -j ACCEPT;
+    #           iptables -t nat -A PREROUTING -i eth1 -p udp -j DNAT --to-destination 192.168.2.2;
+    #           iptables -t nat -A POSTROUTING -o eth1 -p udp -j SNAT --to-source 172.20.1.2;
+    #           iptables -t nat -A PREROUTING -i eth1 -p tcp -j DNAT --to-destination 192.168.2.2;
+    #           iptables -t nat -A POSTROUTING -o eth1 -p tcp -j SNAT --to-source 172.20.1.2;
+    #           tail -f /dev/null"
+
+    # restricted cone NAT
     command: >
         sh -c "
               sleep 3;
-              iptables -t nat -A PREROUTING -i eth1 -p udp -j DNAT --to-destination 192.168.2.2;
-              iptables -t nat -A POSTROUTING -o eth1 -p udp -j SNAT --to-source 172.20.1.2;
-              iptables -t nat -A PREROUTING -i eth1 -p tcp -j DNAT --to-destination 192.168.2.2;
-              iptables -t nat -A POSTROUTING -o eth1 -p tcp -j SNAT --to-source 172.20.1.2;
               iptables -A FORWARD -j ACCEPT;
+              iptables -t nat -A PREROUTING -i eth1 -j DNAT --to-destination 192.168.2.2;
+              iptables -t nat -A POSTROUTING -o eth1 -j SNAT --to-source 172.20.1.2;
+              iptables -A INPUT -i eth1 -m state --state ESTABLISHED,RELATED -j ACCEPT;
+              iptables -A INPUT -i eth1 -m state --state NEW -j DROP;
               tail -f /dev/null"
     network_mode: "none"
 
