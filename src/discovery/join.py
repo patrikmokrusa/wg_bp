@@ -8,28 +8,40 @@ from sync.mq import MessageQueueSync
 from state import State
 
 class DiscoveryJoin(DiscoveryBase):
+    """
+    Direct join discovery module. Nodes can connect to a bootstap node via TCP and exchange initial information. 
+    """
     def __init__(self, injected_state: State, injected_sync: SyncDHT | SyncGossip | MessageQueueSync, bootstrap_port: int = 17777):
+        """ Constructor for the DiscoveryJoin class. Initializes the state, synchronization module, and bootstrap port. """
         self.state = injected_state
+        """ Actual state object to add new peer to. """
         self.sync = injected_sync
+        """ Sync module to exchange synchronization information with the bootstrap node. """
         self.bootstrap_port = bootstrap_port
+        """ Port to listen on for incoming JOIN connections. """
         self.running = True
+        """ Flag to control the accept loop. """
 
     def getInfo(self) -> dict:
+        """ Returns information about the discovery method. Used for dnssd discovery purposes. """
         return {
             "type": "JOIN",
             "port": self.bootstrap_port
         }
 
     def stopAccept(self) -> None:
+        """ Stops the accept loop and closes the socket. """
         self.running = False
         self.socket.shutdown(socket.SHUT_RDWR)
         self.socket.close()
 
     def startAccept(self) -> None:
+        """ Starts the accept loop in a separate thread. """
         self.thread = threading.Thread(target=self._acceptLoop, daemon=True)
         self.thread.start()
 
     def _acceptLoop(self) -> None:
+        """ Accept loop to listen for incoming JOIN connections and handle them. """
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         print(f"[JOIN] Binding to port {self.bootstrap_port} for accepting JOIN connections...")
         self.socket.bind(("", self.bootstrap_port))
@@ -44,19 +56,21 @@ class DiscoveryJoin(DiscoveryBase):
                 return
             print(f"[JOIN] Accepted connection from: {addr[0]}:{addr[1]}")
             
-            client_handler = threading.Thread(target=self.handle_client, args=(client,))
+            client_handler = threading.Thread(target=self._handle_client, args=(client,))
             client_handler.start() 
 
         self.socket.close()
 
 
-    def get_error_msg(self, status: str) -> dict:
+    def _get_error_msg(self, status: str) -> dict:
+        """ Helper function to create an error message response. """
         return {
             "type": "ERROR",
             "status": status
         }
     
-    def parse_request_msg(self, msg_str: str) -> tuple:
+    def _parse_request_msg(self, msg_str: str) -> tuple:
+        """ Helper function to parse a request message from a string. """
         msg = literal_eval(msg_str)
         type = msg["type"]
         status = msg["status"]
@@ -69,21 +83,22 @@ class DiscoveryJoin(DiscoveryBase):
         return type, status, content
 
 
-    def handle_client(self, client: socket.socket) -> None:
+    def _handle_client(self, client: socket.socket) -> None:
+        """ Handles an incoming JOIN connection from a client. Parses the request, updates state, and sends a response. """
         request = client.recv(1024)
         print(f"[JOIN] Received: {request.decode('utf-8')}")
 
-        type, status, content = self.parse_request_msg(request.decode('utf-8'))
+        type, status, content = self._parse_request_msg(request.decode('utf-8'))
 
         response = {}
 
         if type != "JOIN":
             print(f"[JOIN] Invalid discovery type: {type}. Expected 'JOIN'.")
-            response = self.get_error_msg("invalid_type")
+            response = self._get_error_msg("invalid_type")
             client.send(str(response).encode('utf-8'))
         elif content['ip'] in self.state.peers or content['ip'] == self.state.ip:
             print(f"[JOIN] Peer with IP {content['ip']} already exists. Skipping addition.")
-            response = self.get_error_msg("exists")
+            response = self._get_error_msg("exists")
             client.send(str(response).encode('utf-8'))
             
         else:
@@ -123,7 +138,8 @@ class DiscoveryJoin(DiscoveryBase):
 
         client.close()
 
-    def parse_response_msg(self, msg_str: str) -> tuple:
+    def _parse_response_msg(self, msg_str: str) -> tuple:
+        """ Helper function to parse a response message from a string. """
         msg = literal_eval(msg_str)
         type = msg["type"]
         status = msg["status"]
@@ -132,6 +148,7 @@ class DiscoveryJoin(DiscoveryBase):
         return type, status, content, sync
 
     def startJoin(self, bootstrap_node: str, sync_port: int = None) -> dict:
+        """ Connects to a bootstrap node to join the network. Sends a JOIN request and waits for a response with the current state and synchronization information. """
         print(f"Joining the network via bootstrap node: {bootstrap_node}")
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -146,7 +163,7 @@ class DiscoveryJoin(DiscoveryBase):
             sock.send(str(msg).encode('utf-8'))
             response = sock.recv(4096)
             print(f"[*] Received: {response.decode('utf-8')}")
-            type, status, content, sync = self.parse_response_msg(response.decode('utf-8'))
+            type, status, content, sync = self._parse_response_msg(response.decode('utf-8'))
             if type == "ERROR":
                 print(f"[JOIN] Error during JOIN: {status}")
             else:

@@ -13,33 +13,40 @@ for logger_name in ("kademlia", "rpcudp"):
     lib_logger.propagate = False
 
 CHANGE_CHECK_KEY = "CHANGE_CHECK"
+""" Key that holds the current version of the DHT. """
 KEY_LIST_KEY = "KEY_LIST"
+""" Key that holds the list of keys that represent peers in the DHT. """
 
 class SyncDHT(SyncBase):
+    """ DHT synchronization module using Kademlia. Each peer runs a DHT server and stores its state in the DHT under its virtual IP as the key. """
     def __init__(self, injected_state: State, seed_node: tuple | None = None, port: int = 6881, interval: int = 5) -> None:
+        """ Constructor for SyncDHT. Initializes the DHT server, starts the listening loop, and performs initial synchronization if a seed node is provided. """
+        
         self.state = injected_state
         self.port = port
         self.interval = interval
+        """ Interval in seconds to check for changes in the DHT. """
         self.CurrentChangeCheckValue = -1
+        """ The value of local DHT state version. """
 
-        self.loop = asyncio.new_event_loop()
-        self.loop_thread = threading.Thread(target=self._run_loop, args=(self.loop,), daemon=True)
-        self.loop_thread.start()
+        self._loop = asyncio.new_event_loop()
+        self._loop_thread = threading.Thread(target=self._run_loop, args=(self._loop,), daemon=True)
+        self._loop_thread.start()
         
-        self.listener_loop = asyncio.new_event_loop()
-        self.listener_dht = Server()
-        self.listener_thread = threading.Thread(target=self._run_loop, args=(self.listener_loop,), daemon=True)
-        self.listener_thread.start()
-        self.server_loop = asyncio.new_event_loop()
-        self.dht = Server()
-        self.server_thread = threading.Thread(target=self._run_loop, args=(self.server_loop,), daemon=True)
-        self.server_thread.start()
+        self._listener_loop = asyncio.new_event_loop()
+        self._listener_dht = Server()
+        self._listener_thread = threading.Thread(target=self._run_loop, args=(self._listener_loop,), daemon=True)
+        self._listener_thread.start()
+        self._server_loop = asyncio.new_event_loop()
+        self._dht = Server()
+        self._server_thread = threading.Thread(target=self._run_loop, args=(self._server_loop,), daemon=True)
+        self._server_thread.start()
         
         if seed_node:
-            asyncio.run_coroutine_threadsafe(self.listener_dht.listen(port, self.state.ip), self.listener_loop).result()
-            asyncio.run_coroutine_threadsafe(self.listener_dht.bootstrap([seed_node]), self.listener_loop).result()
-            asyncio.run_coroutine_threadsafe(self.dht.listen(port-1, self.state.ip), self.server_loop).result()
-            asyncio.run_coroutine_threadsafe(self.dht.bootstrap([seed_node, (self.state.ip, port)]), self.server_loop).result()
+            asyncio.run_coroutine_threadsafe(self._listener_dht.listen(port, self.state.ip), self._listener_loop).result()
+            asyncio.run_coroutine_threadsafe(self._listener_dht.bootstrap([seed_node]), self._listener_loop).result()
+            asyncio.run_coroutine_threadsafe(self._dht.listen(port-1, self.state.ip), self._server_loop).result()
+            asyncio.run_coroutine_threadsafe(self._dht.bootstrap([seed_node, (self.state.ip, port)]), self._server_loop).result()
             
             print(f"[DHT] DHT server started on port:{self.port} with bootstrap node {seed_node}")
 
@@ -53,10 +60,10 @@ class SyncDHT(SyncBase):
 
 
         else:
-            asyncio.run_coroutine_threadsafe(self.listener_dht.listen(port, self.state.ip), self.listener_loop).result()
+            asyncio.run_coroutine_threadsafe(self._listener_dht.listen(port, self.state.ip), self._listener_loop).result()
             
-            asyncio.run_coroutine_threadsafe(self.dht.listen(port-1, self.state.ip), self.server_loop).result()
-            asyncio.run_coroutine_threadsafe(self.dht.bootstrap([(self.state.ip, port)]), self.server_loop).result()
+            asyncio.run_coroutine_threadsafe(self._dht.listen(port-1, self.state.ip), self._server_loop).result()
+            asyncio.run_coroutine_threadsafe(self._dht.bootstrap([(self.state.ip, port)]), self._server_loop).result()
 
             self._setValueSync(CHANGE_CHECK_KEY, 0)
             self._setValueSync(KEY_LIST_KEY, [self.state.ip])
@@ -68,19 +75,22 @@ class SyncDHT(SyncBase):
             })
             print(f"[DHT] DHT server started on port:{self.port}")
 
-        asyncio.run_coroutine_threadsafe(self._async_init(), self.loop)
+        asyncio.run_coroutine_threadsafe(self._async_init(), self._loop)
 
     def _run_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        """ Helper function to run an asyncio event loop. """
         asyncio.set_event_loop(loop)
         loop.run_forever()
     
     async def _async_init(self)-> None:
+        """ Async initialization function to set up the periodic check for changes in the DHT. """
         self.termination_event = asyncio.Event()
         self.task = asyncio.create_task(self._check_for_changes_loop())
 
     async def _check_for_changes_loop(self):
+        """ Periodic loop to check for changes in the DHT. """
         while True:
-            self.checkForChangeTrigger()
+            self._checkForChangeTrigger()
             try:
                 await asyncio.wait_for(self.termination_event.wait(), timeout=self.interval)
                 break 
@@ -88,16 +98,18 @@ class SyncDHT(SyncBase):
                 pass
 
     def _setValueSync(self, key: str, value: dict | int | None) -> None:
+        """ Helper function to set a value in the DHT synchronously. """
         value = json.dumps(value)  # Convert value to JSON string for storage
 
 
-        ret = asyncio.run_coroutine_threadsafe(self.dht.set(key, value), self.server_loop)
+        ret = asyncio.run_coroutine_threadsafe(self._dht.set(key, value), self._server_loop)
         # print(f"[DHT] Set key '{key}' to value '{value}' in DHT")
         return ret.result()
 
 
     def _getValueSync(self, key: str) -> dict | int | None:
-        ret = asyncio.run_coroutine_threadsafe(self.dht.get(key), self.server_loop).result()
+        """ Helper function to get a value from the DHT synchronously. """
+        ret = asyncio.run_coroutine_threadsafe(self._dht.get(key), self._server_loop).result()
         # print(f"[DHT] Got value for key '{key}' from DHT")
         if not ret:
             return None
@@ -105,10 +117,8 @@ class SyncDHT(SyncBase):
 
         return ret
 
-    def initSync(self) -> None:
-        print("[DHT] Initializing DHT synchronization...")
-
     def getInfo(self)-> dict:
+        """ Returns information about the synchronization module. Used for discovery purposes. """
         info = {
             "sync-type": "DHT",
             "sync-ip": self.state.ip,
@@ -116,7 +126,8 @@ class SyncDHT(SyncBase):
         }
         return info
 
-    def publishChange(self, virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int, sync_port: int | None = None):
+    def publishChange(self, virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int, sync_port: int | None = None) -> None:
+        """ Publishes a change to the DHT. """
         print("[DHT] Publishing changes to DHT...")
 
         self._setValueSync(virtual_ip, {
@@ -134,7 +145,11 @@ class SyncDHT(SyncBase):
         key_list.append(virtual_ip)
         self._setValueSync(KEY_LIST_KEY, key_list)
 
-    def checkForChangeTrigger(self) -> None:
+    def _checkForChangeTrigger(self) -> None:
+        """ 
+        Checks if there have been changes in the DHT by comparing the current change check value with the local one. 
+        If there are changes, it triggers checkForChanges. 
+        """
         # print("[DHT] Checking for changes in DHT...")
         current_value = self._getValueSync(CHANGE_CHECK_KEY)
         if current_value != self.CurrentChangeCheckValue:
@@ -143,38 +158,45 @@ class SyncDHT(SyncBase):
             if self.CurrentChangeCheckValue > current_value:
                 self.CurrentChangeCheckValue = -1
                 print(f"[DHT] trying to resync with DHT")
-                self.checkForChangeTrigger()
+                self._checkForChangeTrigger()
                 return
-            self.checkForCHanges()
+            self.checkForChanges()
             self.CurrentChangeCheckValue = current_value
 
 
-    def appendToKeyList(self, virtual_ip: str) -> None:
-
-        key_list = self._getValueSync(KEY_LIST_KEY)
-        if virtual_ip not in key_list:
-            key_list.append(virtual_ip)
-            self._setValueSync(KEY_LIST_KEY, key_list)
+    # def _appendToKeyList(self, virtual_ip: str) -> None:
+    #     """ Helper function to append a virtual IP to the key list in the DHT. This is used when a new peer is added to the DHT. """
+    #     key_list = self._getValueSync(KEY_LIST_KEY)
+    #     if virtual_ip not in key_list:
+    #         key_list.append(virtual_ip)
+    #         self._setValueSync(KEY_LIST_KEY, key_list)
         
-    def isInKeyList(self, virtual_ip: str) -> bool:
-        key_list = self._getValueSync(KEY_LIST_KEY)
-        return virtual_ip in key_list
+    # def isInKeyList(self, virtual_ip: str) -> bool:
+    #     """ Helper function to check if a virtual IP is in the key list in the DHT. This is used to check if a peer is already known in the DHT. """
+    #     key_list = self._getValueSync(KEY_LIST_KEY)
+    #     return virtual_ip in key_list
     
-    def removeFromKeyList(self, virtual_ip: str) -> None:
-        key_list = self._getValueSync(KEY_LIST_KEY)
-        if virtual_ip in key_list:
-            key_list.remove(virtual_ip)
-            self._setValueSync(KEY_LIST_KEY, key_list)
+    # def removeFromKeyList(self, virtual_ip: str) -> None:
+    #     """ Helper function to remove a virtual IP from the key list in the DHT. This is used when a peer is removed from the DHT. """
+    #     key_list = self._getValueSync(KEY_LIST_KEY)
+    #     if virtual_ip in key_list:
+    #         key_list.remove(virtual_ip)
+    #         self._setValueSync(KEY_LIST_KEY, key_list)
 
-    def checkIfExistsByKeyList(self) -> list:
-        key_list = self._getValueSync(KEY_LIST_KEY)
-        active_peers = []
-        for key in key_list:
-            if self._getValueSync(key) is not None:
-                active_peers.append(key)
-        return active_peers
+    # def checkIfExistsByKeyList(self) -> list:
+    #     """ Helper function to check if a virtual IP exists in the key list in the DHT. This is used to check if a peer is already known in the DHT. """
+    #     key_list = self._getValueSync(KEY_LIST_KEY)
+    #     active_peers = []
+    #     for key in key_list:
+    #         if self._getValueSync(key) is not None:
+    #             active_peers.append(key)
+    #     return active_peers
 
-    def checkForCHanges(self) -> None:
+    def checkForChanges(self) -> None:
+        """ 
+        Checks for changes in the DHT by fetching the list of keys from the DHT and comparing the peer information for each key with the local state. 
+        If there are changes, it updates the local state accordingly. 
+        """
         self.state.lock_aquire(self)
         # print(f"[DHT] Checking for changes in DHT... START")
 
@@ -223,9 +245,10 @@ class SyncDHT(SyncBase):
 
 
     def exitSync(self) -> None:
+        """ Exits and cleans up the synchronization module. """
         print("[DHT] Exiting DHT synchronization...")
         if self.termination_event:
-            self.loop.call_soon_threadsafe(self.termination_event.set)
+            self._loop.call_soon_threadsafe(self.termination_event.set)
 
         self._setValueSync(self.state.ip, None)
 
@@ -237,5 +260,5 @@ class SyncDHT(SyncBase):
         self._setValueSync(CHANGE_CHECK_KEY, old + 1)
         # print(f"[DHT] Incremented change check value to trigger updates")
 
-        self.dht.stop()
-        self.listener_dht.stop()
+        self._dht.stop()
+        self._listener_dht.stop()

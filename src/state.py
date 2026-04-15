@@ -20,8 +20,10 @@ STUN_SERVERS = [
     ("stunserver2025.stunprotocol.org", 3478),
     ("stun1.l.google.com", 19302),
 ]
+""" List of public STUN servers. """
 
 CUSTOM_STUN_PORT = 9999
+""" Port for custom STUN server."""
 
 # used in combination with server in test/stun/stun.py
 CUSTOM_STUN_SERVERS = [
@@ -32,33 +34,51 @@ CUSTOM_STUN_SERVERS = [
     ("172.18.0.1", CUSTOM_STUN_PORT), # docker no fw
     ("10.10.2.104", CUSTOM_STUN_PORT), # host machine
 ]
+""" List of custom STUN servers for testing with a custom STUN server implemented in test/stun/stun.py. Leave blank to skip custom STUN and use only public STUN servers. """
 
 class State:
+    """
+    Represents the actual state of the WireGuard interface and its peers.
+    """
     def __init__(self, ip: str, port: int = 51820, interface: str = "wg0", keepalive: int = 25, forwarded_port: int | None = None) -> None:
+        """ Constructor for the State class. Creates key pair, gets public IP, initializes netlink and WireGuard interface. """
         self.private_key = None
+        """ The private key for the WireGuard interface. """
         self.public_key = None
+        """ The public key for the WireGuard interface. """
         self._gen_key_pair()
         self.ip = ip
+        """ The virtual IP address for the WireGuard interface. """
         self.port = port
+        """ The port for the WireGuard interface. """
         self.forwarded_port = forwarded_port
+        """ The forwarded port for the WireGuard interface. If set, this port will be used as the public port instead of the one determined by STUN."""
         self.peers = {} # peer_virtual_ip: {public_key : key_str, endpoint_ip : endpoint_str}
+        """ Dictionary of peers in the network. Maps virtual IPs to their public keys and endpoint information. """
         self.interface = interface
+        """ The name of the WireGuard interface. """
         self.keepalive = keepalive
-        self.bootstrap_peer = None
+        """ The persistent keepalive interval for WireGuard peers. """
         self.public_ip = None
+        """ The public IP address determined by STUN. """
         self.public_port = None
-        self.update_public_ip()
+        """ The public port determined by STUN. """
+        self._update_public_ip()
         self._iplinkInit()
-        self.lock = threading.Lock()
+        self._lock = threading.Lock()
+        """ A lock for synchronizing access to the state when modifying it from different threads. """
 
     def lock_aquire(self, requester) -> None:
+        """ Acquires the state lock. Should be used when modifying the state to prevent collisions between different modules."""
         # print(f"[STATE] {requester} acquiring lock...")
-        self.lock.acquire()
+        self._lock.acquire()
 
     def lock_release(self) -> None:
-        self.lock.release()
+        """ Releases the state lock. Should be used when modifying the state to prevent collisions between different modules."""
+        self._lock.release()
 
     def _iplinkInit(self) -> None:
+        """ Initializes the WireGuard interface using pyroute2. """
         self.ipr = IPRoute()
 
         if not self.ipr.link_lookup(ifname=self.interface):
@@ -74,6 +94,7 @@ class State:
 
     
     def _wgInit(self) -> None:
+        """ Initializes the WireGuard interface using pyroute2. """
         self.wg = WireGuard()
 
         self.wg.set(
@@ -82,7 +103,8 @@ class State:
             listen_port=self.port
         )
 
-    def updatePeerAfterHandshake(self, virtual_ip: str) -> tuple:
+    def _updatePeerAfterHandshake(self, virtual_ip: str) -> tuple:
+        """ Not used. Waits for handshake completion with a peer and updates its endpoint information. """
         wg = WireGuard()
         # print(f"[*****STATE] Waiting for handshake completion with peer {virtual_ip}")
 
@@ -117,6 +139,7 @@ class State:
 
 
     def _wg_set(self, interface, **kwargs) -> None:
+        """ Helper method to set WireGuard configuration in a separate event loop. """
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
@@ -130,11 +153,13 @@ class State:
             loop.close()
 
     def _wgSetOwnEventLoop(self, interface, **kwargs) -> None:
+        """ Helper method to set Wireguard in a seperate thread. """
         thread = threading.Thread(target=self._wg_set, args=(interface,), kwargs=kwargs)
         thread.start()
         thread.join()
 
-    def get_public_ip(self):
+    def _get_public_ip(self):
+        """ Uses STUN to get public IP and port. """
         print("[STATE] Determining public IP and port via STUN...")
 
         for stun_host, stun_port in STUN_SERVERS:
@@ -158,7 +183,8 @@ class State:
                 print(f"[STATE] STUN lookup failed via {stun_host}:{stun_port}: {e}")
 
 
-    def update_public_ip(self) -> None:
+    def _update_public_ip(self) -> None:
+        """ Updates the public IP and port using custom STUN. Can be configured in global variable CUSTOM_STUN_SERVERS. Used for testing with custom STUN server in test/stun/stun.py. """
         print("[STATE] CUSTOM STUN")
 
         for stun_host, stun_port in CUSTOM_STUN_SERVERS:
@@ -185,7 +211,7 @@ class State:
         print(f"[STATE] Custom STUN failed.")
 
         try:
-            self.public_ip, self.public_port = self.get_public_ip()
+            self.public_ip, self.public_port = self._get_public_ip()
             if self.forwarded_port:
                 self.public_port = self.forwarded_port  
         except Exception as e:
@@ -193,6 +219,7 @@ class State:
             exit(1)
 
     def _gen_key_pair(self) -> None:
+        """ Generates wireguard key pair. """
         private = x25519.X25519PrivateKey.generate()
         public = private.public_key()
 
@@ -214,6 +241,7 @@ class State:
         
 
     def add_peer(self, peer_virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int = 51820) -> None:
+        """ Adds a peer to the state and WireGuard configuration. """
         if peer_virtual_ip == self.ip:
             return
         self.peers[peer_virtual_ip] = {"public_key": public_key, "endpoint_ip": endpoint_ip, "endpoint_port": endpoint_port}
@@ -233,6 +261,7 @@ class State:
         # self.ping_all_peers()
 
     def _getAllowedIPs(self, peer_virtual_ip: str) -> list:
+        """ Helper method to parse allowed IP for peers when adding them. """
         allowed_ips = []
         if "/" in peer_virtual_ip:
             allowed_ips.append(peer_virtual_ip)
@@ -243,6 +272,7 @@ class State:
 
 
     def remove_peer(self, peer_virtual_ip: str) -> None:
+        """ Removes a peer from the state and WireGuard configuration. """
         if peer_virtual_ip in self.peers:
 
             try:
@@ -263,6 +293,7 @@ class State:
 
 
     def get_config(self)-> str:
+        """ Generates a WireGuard configuration file content based on the current state. Can be used for printing or WG-Quick."""
         config = "\n"
         config += "[Interface]\n"
         config += f"PrivateKey = {self.private_key}\n"
@@ -279,12 +310,14 @@ class State:
 
 
     def ping_all_peers(self)-> None:
+        """ Pings all peers to check connectivity. Used for debugging and testing. """
         for peer_ip in self.peers.keys():
             print(f"[STATE] Pinging peer {peer_ip}")
             ping(peer_ip, verbose=True, count=2, timeout=0.5)
 
     
     def disableNetlink(self):
+        """ Disables the WireGuard interface using netlink. Used when exiting the program to clean up the interface. """
         idx = self.ipr.link_lookup(ifname=self.interface)[0]
         # self.ipr.link("set", index=idx, state="down")
         self.ipr.link("delete", index=idx)
@@ -293,10 +326,12 @@ class State:
         self.wg.close()
 
     def netlinkUp(self):
+        """ Brings the WireGuard interface up using netlink. """
         idx = self.ipr.link_lookup(ifname=self.interface)[0]
         self.ipr.link("set", index=idx, state="up")
 
     def netlinkDown(self):
+        """ Brings the WireGuard interface down using netlink. Only brings it down, does not delete it.  """
         idx = self.ipr.link_lookup(ifname=self.interface)[0]
         self.ipr.link("set", index=idx, state="down")
 
@@ -304,6 +339,7 @@ class State:
 
 
     def interface_json(self)-> dict:
+        """ Returns information about the interface. Used for discovery purposes. """
         return {
             "ip": self.ip,
             "port": self.public_port,
