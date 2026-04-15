@@ -25,37 +25,29 @@ class SyncGossip(SyncBase):
         print("Initializing Gossip synchronization...")
         self.interval = interval
         """ The interval (in seconds) at which to send gossip messages. """
-        self.state = injected_state
-        """ The state object to synchronize. """
-        self.port = port
-        """ The port to use for gossip communication. """
-        self.seed_node = seed_node
-        """ Seed node to connect to. """
+        self._state = injected_state
+        self._port = port
+        self._seed_node = seed_node
 
-        self.send_lock = threading.Lock()
-        """ Lock to prevent concurrent sends. """
+        self._send_lock = threading.Lock()
 
-        self.sendUpdates = True
-        """ Flag to control whether to send updates. """
-        self.shutdown_event = None  # Will be created in async context
-        """ Event to signal shutdown to the gossip task. """
-        self.gossip_task = None
-        """ Task for the gossip heartbeat. """
-        self.version = 0
-        """ Local gossip state version."""
-        self.peers = {}
-        """ Local gossip state of peers. """
-        self.peers[self.state.ip] = {
-            "virtual_ip": self.state.ip,
-            "public_key": self.state.public_key,
-            "endpoint_ip": self.state.public_ip,
-            "endpoint_port": self.state.public_port,
-            "sync_port": self.port
+        self._sendUpdates = True
+        self._shutdown_event = None  # Will be created in async context
+        self._gossip_task = None
+        self._version = 0
+        self._peers = {}
+
+        self._peers[self._state.ip] = {
+            "virtual_ip": self._state.ip,
+            "public_key": self._state.public_key,
+            "endpoint_ip": self._state.public_ip,
+            "endpoint_port": self._state.public_port,
+            "sync_port": self._port
         }
 
-        if self.seed_node:
-            print(f"[Gossip] Bootstrapping to seed node at {self.seed_node}...")
-            self.peers[self.seed_node["virtual_ip"]] = self.seed_node
+        if self._seed_node:
+            print(f"[Gossip] Bootstrapping to seed node at {self._seed_node}...")
+            self._peers[self._seed_node["virtual_ip"]] = self._seed_node
 
         # Create event loop in separate thread
         self.loop = asyncio.new_event_loop()
@@ -72,11 +64,11 @@ class SyncGossip(SyncBase):
         Initializes the sending gossip "heartbeat" and a server for receiving those messages.
         """
         self.shutdown_event = asyncio.Event()
-        self.server = await asyncio.start_server(self._handleGossip, self.state.ip, self.port)
-        print(f"[Gossip] Gossip server listening on {self.state.ip}:{self.port}")
+        self.server = await asyncio.start_server(self._handleGossip, self._state.ip, self._port)
+        print(f"[Gossip] Gossip server listening on {self._state.ip}:{self._port}")
         
         # Start gossip heartbeat
-        self.gossip_task = asyncio.create_task(self._sendGossip())
+        self._gossip_task = asyncio.create_task(self._sendGossip())
 
 
     async def _handleGossip(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
@@ -90,34 +82,33 @@ class SyncGossip(SyncBase):
             new_peer = msg["state"][from_ip]
 
             # update only port
-            self.peers[new_peer["virtual_ip"]]["sync_port"] = new_peer["sync_port"]
+            self._peers[new_peer["virtual_ip"]]["sync_port"] = new_peer["sync_port"]
             print(f"[Gossip] Onboarded new peer: {new_peer['virtual_ip']}")
-            self.version += 1
+            self._version += 1
             await self._sendStateToPeer(from_ip, from_port)
-        elif msg["version"] < self.version:
+        elif msg["version"] < self._version:
             # update the other peer to our version and send them our state
             await self._sendStateToPeer(from_ip, from_port)
             return
-        elif msg["version"] == self.version:
+        elif msg["version"] == self._version:
             return
         else:
             print(f"[Gossip] Received state update from peer {from_ip}:{from_port}.")
-            self.version = msg["version"]
-            self.peers = msg["state"]
-            # print(f"[Gossip] recieved state: {self.peers} version: {self.version}")
+            self._version = msg["version"]
+            self._peers = msg["state"]
             self.checkForChanges()
 
         if msg["type"] == DEPARTURE_NOTICE:
             print(f"[Gossip] Received departure notice from {from_ip}:{from_port}")
-            if from_ip in self.peers.keys():
-                del self.peers[from_ip]
+            if from_ip in self._peers.keys():
+                del self._peers[from_ip]
                 self.checkForChanges()
 
 
     async def _sendGossip(self) -> None:
         """ Based on interval, randomly selects a subset of peers to send the full state to them. """
         while True:
-            known_peers = self.peers.keys()
+            known_peers = self._peers.keys()
             if len(known_peers) == 1:
                 try:
                     await asyncio.wait_for(self.shutdown_event.wait(), timeout=self.interval)
@@ -130,7 +121,7 @@ class SyncGossip(SyncBase):
             for _ in range(min(DEGREE, len(known_peers)-1)):
                 while True:
                     random_peer_ip = random.choice(list(known_peers))
-                    if random_peer_ip == self.state.ip:
+                    if random_peer_ip == self._state.ip:
                         continue
                     elif random_peer_ip in contacted_peers:
                         continue
@@ -140,10 +131,10 @@ class SyncGossip(SyncBase):
                 contacted_peers.append(random_peer_ip)
                 
                 try:
-                    await self._sendStateToPeer(random_peer_ip, self.peers[random_peer_ip]["sync_port"])
+                    await self._sendStateToPeer(random_peer_ip, self._peers[random_peer_ip]["sync_port"])
                 except Exception as e:
-                    if random_peer_ip not in self.state.peers.keys():
-                        del self.peers[random_peer_ip]
+                    if random_peer_ip not in self._state.peers.keys():
+                        del self._peers[random_peer_ip]
             
             # Wait for interval or shutdown event
             try:
@@ -154,11 +145,11 @@ class SyncGossip(SyncBase):
 
     async def _sendStateToPeer(self, peer_ip: str, peer_port: int | None, departure: bool = False) -> None:
         """ Sends the full state to a specific peer. """
-        self.send_lock.acquire()
+        self._send_lock.acquire()
 
         if peer_port is None:
             print(f"[Gossip] Peer {peer_ip} not onboarded yet, cannot send state.")
-            self.send_lock.release()
+            self._send_lock.release()
             return
 
         # Add timeout to connection attempt (e.g., 5 seconds)
@@ -168,14 +159,14 @@ class SyncGossip(SyncBase):
             )
         except Exception as e:
             # print(f"[*!*] Error connecting to peer {peer_ip}:{peer_port} - {e}")
-            self.send_lock.release()
+            self._send_lock.release()
             raise
         
         msg = {
             "type": STATE_UPDATE,
-            "version": self.version,
-            "from": f"{self.state.ip}:{self.port}",
-            "state": self.peers
+            "version": self._version,
+            "from": f"{self._state.ip}:{self._port}",
+            "state": self._peers
         }
 
         if departure:
@@ -185,16 +176,16 @@ class SyncGossip(SyncBase):
         await writer.drain()
         writer.close()
         await writer.wait_closed()
-        self.send_lock.release()
+        self._send_lock.release()
 
 
     def getInfo(self) -> dict:
         """ Returns information about the synchronization module for discovery purposes. """
         info = {
             "sync-type": "Gossip",
-            "sync-ip": self.state.ip,
-            "sync-port": self.port,
-            "sync-seed": self.peers[self.state.ip]
+            "sync-ip": self._state.ip,
+            "sync-port": self._port,
+            "sync-seed": self._peers[self._state.ip]
         }
         return info
 
@@ -203,17 +194,17 @@ class SyncGossip(SyncBase):
     def publishChange(self, virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int, sync_port: int | None=None) -> None:
         """ Publishes a change to the gossip state. """
         print(f"[Gossip] Publishing changes to Gossip network...")
-        self.version += 1
+        self._version += 1
         msg = {
             "type": STATE_UPDATE,
-            "version": self.version,
+            "version": self._version,
             "virtual_ip": virtual_ip,
             "public_key": public_key,
             "endpoint_ip": endpoint_ip,
             "endpoint_port": endpoint_port,
-            "sync_port": self.port
+            "sync_port": self._port
         }
-        self.peers[virtual_ip] = {
+        self._peers[virtual_ip] = {
             "virtual_ip": virtual_ip,
             "public_key": public_key,
             "endpoint_ip": endpoint_ip,
@@ -221,26 +212,26 @@ class SyncGossip(SyncBase):
             "sync_port": None
         }
 
-        if virtual_ip == self.state.ip:
-            self.peers[virtual_ip]["sync_port"] = self.port
+        if virtual_ip == self._state.ip:
+            self._peers[virtual_ip]["sync_port"] = self._port
 
-        # print(f"[Gossip] Successfully published change: {self.peers} version: {self.version}")
+        # print(f"[Gossip] Successfully published change: {self._peers} version: {self._version}")
 
 
     async def _sendLastGossip(self) -> None:
         """ Sends a departure notice. Used when exiting the synchronization module. """
-        self.version += 1
-        del self.peers[self.state.ip]
+        self._version += 1
+        del self._peers[self._state.ip]
 
         contacted_peers = []
         
 
-        if len(self.peers) <= 0:
+        if len(self._peers) <= 0:
             return
 
-        for _ in range(min(DEGREE, len(self.peers))):
+        for _ in range(min(DEGREE, len(self._peers))):
             while True:
-                random_peer_ip = random.choice(list(self.peers.keys()))
+                random_peer_ip = random.choice(list(self._peers.keys()))
                 if random_peer_ip in contacted_peers:
                     continue
                 else:
@@ -249,27 +240,27 @@ class SyncGossip(SyncBase):
             contacted_peers.append(random_peer_ip)
             
             try:
-                await self._sendStateToPeer(random_peer_ip, self.peers[random_peer_ip]["sync_port"], departure=True)
+                await self._sendStateToPeer(random_peer_ip, self._peers[random_peer_ip]["sync_port"], departure=True)
                 print(f"[Gossip] Departure message sent to {random_peer_ip}")
             except Exception as e:
-                if random_peer_ip not in self.state.peers.keys():
-                    del self.peers[random_peer_ip]
+                if random_peer_ip not in self._state.peers.keys():
+                    del self._peers[random_peer_ip]
                     return
     
 
     def exitSync(self) -> None:
         """ Exits and cleanups the module. """
         print(f"[Gossip] Exiting Gossip synchronization...")
-        self.sendUpdates = False
+        self._sendUpdates = False
         
         # Signal shutdown to wake up the gossip task
         if self.shutdown_event:
             self.loop.call_soon_threadsafe(self.shutdown_event.set)
         
         # Wait for gossip task to finish
-        if self.gossip_task:
+        if self._gossip_task:
             try:
-                self.gossip_task.result(timeout=5)
+                self._gossip_task.result(timeout=5)
             except:
                 pass
     
@@ -299,14 +290,14 @@ class SyncGossip(SyncBase):
 
     def checkForChanges(self) -> None:
         """ Compares gossip state to the actual state and applies any necessary changes. """
-        self.state.lock_aquire(self)
+        self._state.lock_aquire(self)
         # print(f"[Gossip] Checking for changes in peers")
-        for peer_ip, peer_info in self.peers.items():
-            existing_peer = self.state.peers.get(peer_ip)
+        for peer_ip, peer_info in self._peers.items():
+            existing_peer = self._state.peers.get(peer_ip)
             if not existing_peer:
-                if peer_info["virtual_ip"] == self.state.ip:
+                if peer_info["virtual_ip"] == self._state.ip:
                     continue
-                self.state.add_peer(
+                self._state.add_peer(
                     peer_info["virtual_ip"],
                     peer_info["public_key"],
                     peer_info["endpoint_ip"],
@@ -319,12 +310,12 @@ class SyncGossip(SyncBase):
 
         # print(f"[Gossip] Checked for changes in peers HALFWAY")
         # check for deleted peers - make a copy to avoid dict size change during iteration
-        existing_peers_copy = list(self.state.peers.items())
+        existing_peers_copy = list(self._state.peers.items())
         for existing_peer_ip, existing_peer_info in existing_peers_copy:
-            if existing_peer_ip not in self.peers.keys():
-                self.state.remove_peer(existing_peer_ip)
+            if existing_peer_ip not in self._peers.keys():
+                self._state.remove_peer(existing_peer_ip)
                 print(f"[Gossip] Removed peer: {existing_peer_ip}\n")
         # print(f"[Gossip] Finished checking for changes in peers RELEASE LOCK")
-        self.state.lock_release()
+        self._state.lock_release()
         
         

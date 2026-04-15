@@ -179,7 +179,6 @@ def main():
 - help : Show this help message
 - info : Show current state information
 - ping : Ping all peers in the network
-- stun : Get public IP and port using STUN (for testing)
 """
     print(help_msg)
     while run_flag:
@@ -281,11 +280,5 @@ def main():
 
         elif input_val == "ping":
             state.ping_all_peers()
-        
-        elif input_val == "stun":
-            state.netlinkDown()
-            public_ip, public_port = state.get_public_ip()
-            print(f"Public IP: {public_ip}, Public Port: {public_port}")
-            state.netlinkUp()
 if __name__ == "__main__":
     main()

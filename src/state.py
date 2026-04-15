@@ -25,7 +25,7 @@ STUN_SERVERS = [
 CUSTOM_STUN_PORT = 9999
 """ Port for custom STUN server."""
 
-# used in combination with server in test/stun/stun.py
+
 CUSTOM_STUN_SERVERS = [
     ("172.20.2.2", CUSTOM_STUN_PORT), # TRUELY NATED DOCKER COMPOSE
     # ("stun", CUSTOM_STUN_PORT), # stun container in same network
@@ -34,14 +34,27 @@ CUSTOM_STUN_SERVERS = [
     ("172.18.0.1", CUSTOM_STUN_PORT), # docker no fw
     ("10.10.2.104", CUSTOM_STUN_PORT), # host machine
 ]
-""" List of custom STUN servers for testing with a custom STUN server implemented in test/stun/stun.py. Leave blank to skip custom STUN and use only public STUN servers. """
+""" 
+List of custom STUN servers for testing with a custom STUN server implemented in test/stun/stun.py.
+Leave blank to skip custom STUN and use only public STUN servers. 
+"""
 
 class State:
     """
     Represents the actual state of the WireGuard interface and its peers.
     """
     def __init__(self, ip: str, port: int = 51820, interface: str = "wg0", keepalive: int = 25, forwarded_port: int | None = None) -> None:
-        """ Constructor for the State class. Creates key pair, gets public IP, initializes netlink and WireGuard interface. """
+        """ 
+        Constructor for the State class. Creates key pair, gets public IP, initializes netlink and WireGuard interface. 
+        
+        Args:
+            ip: The virtual IP address for the WireGuard interface.
+            port: The port for the WireGuard interface. Default is 51820.
+            interface: The name of the WireGuard interface. Default is "wg0".
+            keepalive: The persistent keepalive for WireGuard peers. Default is 25.
+            forwarded_port: The port forwarded to the WireGuard interface (If set overrides the Stun public port). Default is None.
+
+        """
         self.private_key = None
         """ The private key for the WireGuard interface. """
         self.public_key = None
@@ -51,14 +64,12 @@ class State:
         """ The virtual IP address for the WireGuard interface. """
         self.port = port
         """ The port for the WireGuard interface. """
-        self.forwarded_port = forwarded_port
-        """ The forwarded port for the WireGuard interface. If set, this port will be used as the public port instead of the one determined by STUN."""
+        self._forwarded_port = forwarded_port
         self.peers = {} # peer_virtual_ip: {public_key : key_str, endpoint_ip : endpoint_str}
         """ Dictionary of peers in the network. Maps virtual IPs to their public keys and endpoint information. """
         self.interface = interface
         """ The name of the WireGuard interface. """
-        self.keepalive = keepalive
-        """ The persistent keepalive interval for WireGuard peers. """
+        self._keepalive = keepalive
         self.public_ip = None
         """ The public IP address determined by STUN. """
         self.public_port = None
@@ -66,7 +77,6 @@ class State:
         self._update_public_ip()
         self._iplinkInit()
         self._lock = threading.Lock()
-        """ A lock for synchronizing access to the state when modifying it from different threads. """
 
     def lock_aquire(self, requester) -> None:
         """ Acquires the state lock. Should be used when modifying the state to prevent collisions between different modules."""
@@ -198,8 +208,8 @@ class State:
                 print(f"[STATE] Received STUN response: {data.decode('utf-8')} from {addr[0]}:{addr[1]}")
                 response = json.loads(data.decode('utf-8'))
                 self.public_ip = response['ip']
-                if self.forwarded_port:
-                    self.public_port = self.forwarded_port
+                if self._forwarded_port:
+                    self.public_port = self._forwarded_port
                 else:
                     self.public_port = response['port']
                 sock.close()
@@ -212,8 +222,8 @@ class State:
 
         try:
             self.public_ip, self.public_port = self._get_public_ip()
-            if self.forwarded_port:
-                self.public_port = self.forwarded_port  
+            if self._forwarded_port:
+                self.public_port = self._forwarded_port  
         except Exception as e:
             print(f"[STATE] Error occurred while fetching public IP: {e}")
             exit(1)
@@ -253,7 +263,7 @@ class State:
                 "allowed_ips": self._getAllowedIPs(peer_virtual_ip),
                 "endpoint_addr": endpoint_ip,
                 "endpoint_port": endpoint_port,
-                "persistent_keepalive": self.keepalive
+                "persistent_keepalive": self._keepalive
             }
         )
         print(self.get_config())
@@ -304,7 +314,7 @@ class State:
             config += f"PublicKey = {peer_info['public_key']}\n"
             config += f"AllowedIPs = {peer_ip}\n"
             config += f"Endpoint = {peer_info['endpoint_ip']}:{peer_info['endpoint_port']}\n"
-            config += f"PersistentKeepalive = {self.keepalive}\n\n"
+            config += f"PersistentKeepalive = {self._keepalive}\n\n"
         
         return config
 

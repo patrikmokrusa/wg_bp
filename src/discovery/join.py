@@ -13,25 +13,21 @@ class DiscoveryJoin(DiscoveryBase):
     """
     def __init__(self, injected_state: State, injected_sync: SyncDHT | SyncGossip | MessageQueueSync, bootstrap_port: int = 17777):
         """ Constructor for the DiscoveryJoin class. Initializes the state, synchronization module, and bootstrap port. """
-        self.state = injected_state
-        """ Actual state object to add new peer to. """
-        self.sync = injected_sync
-        """ Sync module to exchange synchronization information with the bootstrap node. """
-        self.bootstrap_port = bootstrap_port
-        """ Port to listen on for incoming JOIN connections. """
-        self.running = True
-        """ Flag to control the accept loop. """
+        self._state = injected_state
+        self._sync = injected_sync
+        self._bootstrap_port = bootstrap_port
+        self._running = True
 
     def getInfo(self) -> dict:
         """ Returns information about the discovery method. Used for dnssd discovery purposes. """
         return {
             "type": "JOIN",
-            "port": self.bootstrap_port
+            "port": self._bootstrap_port
         }
 
     def stopAccept(self) -> None:
         """ Stops the accept loop and closes the socket. """
-        self.running = False
+        self._running = False
         self.socket.shutdown(socket.SHUT_RDWR)
         self.socket.close()
 
@@ -43,12 +39,12 @@ class DiscoveryJoin(DiscoveryBase):
     def _acceptLoop(self) -> None:
         """ Accept loop to listen for incoming JOIN connections and handle them. """
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        print(f"[JOIN] Binding to port {self.bootstrap_port} for accepting JOIN connections...")
-        self.socket.bind(("", self.bootstrap_port))
+        print(f"[JOIN] Binding to port {self._bootstrap_port} for accepting JOIN connections...")
+        self.socket.bind(("", self._bootstrap_port))
         
         self.socket.listen()
-        while self.running:
-            print(f"[JOIN] Listening on bootstrap port {self.bootstrap_port} for JOIN connections...")
+        while self._running:
+            print(f"[JOIN] Listening on bootstrap port {self._bootstrap_port} for JOIN connections...")
             try:
                 client, addr = self.socket.accept() 
             except Exception:
@@ -96,7 +92,7 @@ class DiscoveryJoin(DiscoveryBase):
             print(f"[JOIN] Invalid discovery type: {type}. Expected 'JOIN'.")
             response = self._get_error_msg("invalid_type")
             client.send(str(response).encode('utf-8'))
-        elif content['ip'] in self.state.peers or content['ip'] == self.state.ip:
+        elif content['ip'] in self._state.peers or content['ip'] == self._state.ip:
             print(f"[JOIN] Peer with IP {content['ip']} already exists. Skipping addition.")
             response = self._get_error_msg("exists")
             client.send(str(response).encode('utf-8'))
@@ -104,7 +100,7 @@ class DiscoveryJoin(DiscoveryBase):
         else:
             
             print(f"[JOIN] Adding new peer with IP {content['ip']}:{content['port']}")
-            self.state.add_peer(
+            self._state.add_peer(
                 content["ip"],
                 content["public_key"],
                 content["public_ip"],
@@ -115,16 +111,16 @@ class DiscoveryJoin(DiscoveryBase):
             response = {
                 "type": "JOIN",
                 "status": "success",
-                "content": self.state.interface_json(),
-                "sync": self.sync.getInfo() 
+                "content": self._state.interface_json(),
+                "sync": self._sync.getInfo() 
             }
             
             client.send(str(response).encode('utf-8'))
-            # ip, port = self.state.updatePeerAfterHandshake(content["ip"])
+            # ip, port = self._state.updatePeerAfterHandshake(content["ip"])
             client.recv(1024)
             # print(f"[JOIN*******] new ip: {ip} port: {port}")
 
-            self.sync.publishChange(
+            self._sync.publishChange(
                 content['ip'],
                 content['public_key'],
                 # ip,
@@ -152,8 +148,8 @@ class DiscoveryJoin(DiscoveryBase):
         print(f"Joining the network via bootstrap node: {bootstrap_node}")
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.connect((bootstrap_node, self.bootstrap_port))
-            content = self.state.interface_json()
+            sock.connect((bootstrap_node, self._bootstrap_port))
+            content = self._state.interface_json()
             content["sync_port"] = sync_port
             msg = {
                 "type": "JOIN",
@@ -169,7 +165,7 @@ class DiscoveryJoin(DiscoveryBase):
             else:
                 print(f"[JOIN] JOIN successful.")
 
-            self.state.add_peer(
+            self._state.add_peer(
                 content["ip"],
                 content["public_key"],
                 content["public_ip"],

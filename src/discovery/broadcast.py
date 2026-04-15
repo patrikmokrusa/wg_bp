@@ -8,45 +8,55 @@ from .base import DiscoveryBase
 import json
 
 JOIN_REQUEST = "BCAST_JOIN_REQUEST"
+""" Represents a broadcast join request message type. """
 JOIN_RESPONSE = "BCAST_JOIN_RESPONSE"
+""" Represents a broadcast join response message type. """
 ERROR  = "ERROR"
+""" Represents an error message type. """
 
 class DiscoveryBroadcast(DiscoveryBase):
+    """
+    Broadcast discovery module. Nodes can broadcast their presence on the local network or listen for other nodes
+    """
     def __init__(self, injected_state: State, injected_sync: SyncDHT | SyncGossip | MessageQueueSync | None, bootstrap_port: int = 18888)-> None:
-        self.state = injected_state
-        self.sync = injected_sync
-        self.bootstrap_port = bootstrap_port
-        self.running = True
-        self.thread = None
-        self.socket = None
+        """ Constructor for the DiscoveryBroadcast class. Initializes the state, synchronization module, and bootstrap port. """
+        self._state = injected_state
+        self._sync = injected_sync
+        self._bootstrap_port = bootstrap_port
+        self._running = True
+        self._thread = None
+        self._socket = None
 
     def getInfo(self) -> dict:
+        """ Returns information about the discovery method. Used for dnssd discovery purposes. """
         return {
             "type": "BROADCAST",
-            "port": self.bootstrap_port
+            "port": self._bootstrap_port
         }
 
     def stopAccept(self) -> None:
-        self.running = False
-        self.socket.shutdown(socket.SHUT_RDWR)
-        self.socket.close()
+        """ Stops listening and closes the socket. """
+        self._running = False
+        self._socket.shutdown(socket.SHUT_RDWR)
+        self._socket.close()
 
     def startAccept(self) -> None:
-        self.thread = threading.Thread(target=self._broadcastAcceptLoop, daemon=True)
-        self.thread.start()
+        """ Starts listening for broadcast messages in a separate thread. """
+        self._thread = threading.Thread(target=self._broadcastAcceptLoop, daemon=True)
+        self._thread.start()
 
     def _broadcastAcceptLoop(self) -> None:
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.socket.bind(("", self.bootstrap_port))
-        print(f"[BCAST] Listening for broadcast messages on port {self.bootstrap_port}...")
-        while self.running:
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._socket.bind(("", self._bootstrap_port))
+        print(f"[BCAST] Listening for broadcast messages on port {self._bootstrap_port}...")
+        while self._running:
             try:
-                data, addr = self.socket.recvfrom(1024)
+                data, addr = self._socket.recvfrom(1024)
             except Exception as e:
                 print(f"[BCAST] Socket closed, stopping broadcast accept loop. error: {e}")
                 return
             
-            if self.running:
+            if self._running:
                 # print(f"[BCAST] Received broadcast message from {addr[0]}:{addr[1]}")
                 self._handle_client(data, addr)
 
@@ -57,7 +67,7 @@ class DiscoveryBroadcast(DiscoveryBase):
             print(f"[BCAST] Received JOIN request from {addr[0]}:{addr[1]}")
             content = request['content']
 
-            if content['ip'] in self.state.peers or content['ip'] == self.state.ip:
+            if content['ip'] in self._state.peers or content['ip'] == self._state.ip:
                 print(f"Peer with IP {content['ip']} already exists. Skipping addition.")
                 response = {
                     "type": ERROR,
@@ -65,7 +75,7 @@ class DiscoveryBroadcast(DiscoveryBase):
                 }
             else: 
 
-                self.state.add_peer(
+                self._state.add_peer(
                     content["ip"],
                     content["public_key"],
                     content["public_ip"],
@@ -76,10 +86,10 @@ class DiscoveryBroadcast(DiscoveryBase):
                 response = {
                     "type": JOIN_RESPONSE,
                     "status": "success",
-                    "content": self.state.interface_json(),
-                    "sync": self.sync.getInfo() 
+                    "content": self._state.interface_json(),
+                    "sync": self._sync.getInfo() 
                 }                
-                self.sync.publishChange(
+                self._sync.publishChange(
                     content['ip'],
                     content['public_key'],
                     content['public_ip'],
@@ -92,14 +102,15 @@ class DiscoveryBroadcast(DiscoveryBase):
                 "status": "Invalid request type"
             }
 
-        self.socket.sendto(json.dumps(response).encode('utf-8'), addr)
+        self._socket.sendto(json.dumps(response).encode('utf-8'), addr)
 
     def startJoin(self, bootstrap_node: str = None, sync_port: int = None) -> dict:
+        """ Starts broadcasting a JOIN request to the local network to discover and join existing nodes. """
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
         # client.settimeout(5)
 
-        content = self.state.interface_json()
+        content = self._state.interface_json()
         content["sync_port"] = sync_port
         msg = {
             "type": JOIN_REQUEST,
@@ -108,7 +119,7 @@ class DiscoveryBroadcast(DiscoveryBase):
         }
 
         try:
-            client.sendto(json.dumps(msg).encode('utf-8'), ("<broadcast>", self.bootstrap_port))
+            client.sendto(json.dumps(msg).encode('utf-8'), ("<broadcast>", self._bootstrap_port))
 
             data, addr = client.recvfrom(1024)
             response = json.loads(data.decode('utf-8'))
@@ -119,7 +130,7 @@ class DiscoveryBroadcast(DiscoveryBase):
 
             content = response["content"]
 
-            self.state.add_peer(
+            self._state.add_peer(
                 content["ip"],
                 content["public_key"],
                 content["public_ip"],
