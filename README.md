@@ -53,7 +53,7 @@ python3 main.py join create_peer --run --ip 10.0.0.2
 python3 -u main.py broadcast --run --ip 10.0.0.3
 ```
 
-- join - direct join subprogram
+- broadcast - broadcast subprogram
 - --run - keep the program running
 - --ip - selected virtual ip
 
@@ -63,7 +63,11 @@ python3 -u main.py broadcast --run --ip 10.0.0.3
 python3 -u main.py dnssd --run --ip 10.0.0.4
 ```
 
-After you can select and discovery method you want to join through.
+- dnssd -  subprogram
+- --run - keep the program running
+- --ip - selected virtual ip
+
+After you can select discovery method you want to join through by its index.
 
 ## Leaving network
 
