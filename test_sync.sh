@@ -7,7 +7,7 @@ REMOVE_NET="docker network rm mynet"
 
 DELETE_CONTAINERS="docker rm -f create_peer join_peer bcast_peer dnssd_peer stun"
 
-RUN_STUN="docker run -d --privileged --network host --name stun wg-stun"
+RUN_STUN="docker run -d --privileged --network=mynet --name stun wg-stun"
 # RUN_STUN="docker run -d --privileged -p 9999:9999/udp --name stun wg-stun"
 RUN_CREATE_PEER="docker run -d --entrypoint /bin/bash --privileged --network=mynet \
     --name create_peer wg-bp \

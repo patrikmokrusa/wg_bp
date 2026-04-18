@@ -118,7 +118,6 @@ class DiscoveryJoin(DiscoveryBase):
             client.send(str(response).encode('utf-8'))
             # ip, port = self._state.updatePeerAfterHandshake(content["ip"])
             client.recv(1024)
-            # print(f"[JOIN*******] new ip: {ip} port: {port}")
 
             self._sync.publishChange(
                 content['ip'],
@@ -145,7 +144,7 @@ class DiscoveryJoin(DiscoveryBase):
 
     def startJoin(self, bootstrap_node: str, sync_port: int = None) -> dict:
         """ Connects to a bootstrap node to join the network. Sends a JOIN request and waits for a response with the current state and synchronization information. """
-        print(f"Joining the network via bootstrap node: {bootstrap_node}")
+        print(f"[JOIN] Joining the network via bootstrap node: {bootstrap_node}")
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.connect((bootstrap_node, self._bootstrap_port))
@@ -158,7 +157,7 @@ class DiscoveryJoin(DiscoveryBase):
             }
             sock.send(str(msg).encode('utf-8'))
             response = sock.recv(4096)
-            print(f"[*] Received: {response.decode('utf-8')}")
+            print(f"[JOIN] Received: {response.decode('utf-8')}")
             type, status, content, sync = self._parse_response_msg(response.decode('utf-8'))
             if type == "ERROR":
                 print(f"[JOIN] Error during JOIN: {status}")
@@ -173,7 +172,7 @@ class DiscoveryJoin(DiscoveryBase):
             )
             sock.send(b"OK")
             ok = sock.recv(1024)  # wait for confirmation because gossip
-            print(f"[*] Received confirmation: {ok.decode('utf-8')}")
+            print(f"[JOIN] Received confirmation: {ok.decode('utf-8')}")
 
             return sync
 

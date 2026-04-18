@@ -182,9 +182,8 @@ class MessageQueueSync(SyncBase):
 
     def checkForChanges(self) -> None:
         """ Checks for changes in the peers list and updates the state accordingly. This is called after receiving an update from another peer. """
-        # print("[MQ] BEFORE LOCK")
+
         self._state.lock_aquire(self)
-        # print(f"[MQ] Checking for changes in peers {self._peers.keys()} vs state peers {self._state.peers.keys()}...")
 
         for peer_ip, peer_info in self._peers.items():
             if peer_ip == self._state.ip:

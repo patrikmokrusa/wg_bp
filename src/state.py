@@ -1,10 +1,7 @@
 import socket
 import json
 
-
-import subprocess
 import time
-import urllib
 import stun
 from pythonping import ping
 from pyroute2 import IPRoute, WireGuard
@@ -27,12 +24,11 @@ CUSTOM_STUN_PORT = 9999
 
 
 CUSTOM_STUN_SERVERS = [
-    ("172.20.2.2", CUSTOM_STUN_PORT), # TRUELY NATED DOCKER COMPOSE
-    # ("stun", CUSTOM_STUN_PORT), # stun container in same network
-    ("host.docker.internal", CUSTOM_STUN_PORT), # stun container
-    # ("127.0.0.1", CUSTOM_STUN_PORT), # localhost
-    ("172.18.0.1", CUSTOM_STUN_PORT), # docker no fw
-    ("10.10.2.104", CUSTOM_STUN_PORT), # host machine
+    ("172.20.2.2", CUSTOM_STUN_PORT), # TRUELY NATED DOCKER COMPOSE test_sync
+    ("stun", CUSTOM_STUN_PORT), # stun container in same network test_nat
+    ("127.0.0.1", CUSTOM_STUN_PORT), # localhost
+    # ("172.18.0.1", CUSTOM_STUN_PORT), # docker no fw
+    # ("10.10.2.104", CUSTOM_STUN_PORT), # host machine
 ]
 """ 
 List of custom STUN servers for testing with a custom STUN server implemented in test/stun/stun.py.
@@ -116,7 +112,6 @@ class State:
     def _updatePeerAfterHandshake(self, virtual_ip: str) -> tuple:
         """ Not used. Waits for handshake completion with a peer and updates its endpoint information. """
         wg = WireGuard()
-        # print(f"[*****STATE] Waiting for handshake completion with peer {virtual_ip}")
 
         wait = True
         while wait:
@@ -140,12 +135,8 @@ class State:
                     wait = False
                     print(f"[STATE] Updated peer {virtual_ip} endpoint to {endpoint['addr']}:{endpoint['port']}")
                     break
-
         wg.close()
-
         return addr, port
-
-            
 
 
     def _wg_set(self, interface, **kwargs) -> None:
@@ -247,9 +238,6 @@ class State:
         self.public_key = base64.b64encode(public_raw).decode("ascii")
 
 
-
-        
-
     def add_peer(self, peer_virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int = 51820) -> None:
         """ Adds a peer to the state and WireGuard configuration. """
         if peer_virtual_ip == self.ip:
@@ -268,7 +256,6 @@ class State:
         )
         print(self.get_config())
         print(f"[STATE] Added peer {peer_virtual_ip}")
-        # self.ping_all_peers()
 
     def _getAllowedIPs(self, peer_virtual_ip: str) -> list:
         """ Helper method to parse allowed IP for peers when adding them. """
@@ -329,7 +316,6 @@ class State:
     def disableNetlink(self):
         """ Disables the WireGuard interface using netlink. Used when exiting the program to clean up the interface. """
         idx = self.ipr.link_lookup(ifname=self.interface)[0]
-        # self.ipr.link("set", index=idx, state="down")
         self.ipr.link("delete", index=idx)
 
         self.ipr.close()

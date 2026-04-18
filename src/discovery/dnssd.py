@@ -105,11 +105,11 @@ class DiscoveryDNSSD():
                 sleep(1)
                 continue
             selected_service = int(selected_service)
-            # if selected_service in self._available_services.keys():
+
             if selected_service < len(self._available_services):
                 info = self._available_services[selected_service]["info"]
                 name = self._available_services[selected_service]["name"]
-                # info = self._available_services[selected_service]
+
                 print(f"[DNSSD] Selected service **{selected_service}** ({name}).")
                 self._zeroconf.close()
                 ret = {
@@ -128,7 +128,6 @@ class DiscoveryDNSSD():
         if state_change is ServiceStateChange.Added:
             info = zeroconf.get_service_info(service_type, name)
             if info:
-                # self._available_services[name] = info
                 self._available_services.append({"name": name, "info": info})
                 print(f"[DNSSD] **{self._available_services.index({'name': name, 'info': info})}** Resolved service {name}:\n {info}\n")
             else:
@@ -136,12 +135,10 @@ class DiscoveryDNSSD():
         elif state_change is ServiceStateChange.Removed:
             print(f"[DNSSD] Service {name} removed")
             if info in self._available_services:
-                # del self._available_services[name]
                 self._available_services.remove(info)
         elif state_change is ServiceStateChange.Updated:
             info = zeroconf.get_service_info(service_type, name)
             if info:
-                # self._available_services[name] = info
                 for idx, service in enumerate(self._available_services):
                     if service["name"] == name:
                         self._available_services[idx]["info"] = info

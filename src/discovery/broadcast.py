@@ -57,12 +57,10 @@ class DiscoveryBroadcast(DiscoveryBase):
                 return
             
             if self._running:
-                # print(f"[BCAST] Received broadcast message from {addr[0]}:{addr[1]}")
                 self._handle_client(data, addr)
 
     def _handle_client(self, data: bytes, addr: tuple) -> None:
         request = json.loads(data.decode('utf-8'))
-        # print(f"[BCAST] Received message: {request} from {addr[0]}:{addr[1]}")
         if request['type'] == JOIN_REQUEST:
             print(f"[BCAST] Received JOIN request from {addr[0]}:{addr[1]}")
             content = request['content']
@@ -108,7 +106,6 @@ class DiscoveryBroadcast(DiscoveryBase):
         """ Starts broadcasting a JOIN request to the local network to discover and join existing nodes. """
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        # client.settimeout(5)
 
         content = self._state.interface_json()
         content["sync_port"] = sync_port

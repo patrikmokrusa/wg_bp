@@ -74,7 +74,6 @@ class SyncGossip(SyncBase):
     async def _handleGossip(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         """ Handles incoming gossip messages from other peers. """
         msg = json.loads((await reader.readline()).decode())
-        # print(f"[*] Received Gossip message")
         from_ip, from_port = msg["from"].split(":")
 
         if msg["version"] == 0:
@@ -158,7 +157,6 @@ class SyncGossip(SyncBase):
                 asyncio.open_connection(peer_ip, peer_port), timeout=1
             )
         except Exception as e:
-            # print(f"[*!*] Error connecting to peer {peer_ip}:{peer_port} - {e}")
             self._send_lock.release()
             raise
         
@@ -214,8 +212,6 @@ class SyncGossip(SyncBase):
 
         if virtual_ip == self._state.ip:
             self._peers[virtual_ip]["sync_port"] = self._port
-
-        # print(f"[Gossip] Successfully published change: {self._peers} version: {self._version}")
 
 
     async def _sendLastGossip(self) -> None:
@@ -291,7 +287,6 @@ class SyncGossip(SyncBase):
     def checkForChanges(self) -> None:
         """ Compares gossip state to the actual state and applies any necessary changes. """
         self._state.lock_aquire(self)
-        # print(f"[Gossip] Checking for changes in peers")
         for peer_ip, peer_info in self._peers.items():
             existing_peer = self._state.peers.get(peer_ip)
             if not existing_peer:
@@ -308,14 +303,12 @@ class SyncGossip(SyncBase):
                 if self.check_individual_peer_change(peer_info, existing_peer):
                     reload_required = True
 
-        # print(f"[Gossip] Checked for changes in peers HALFWAY")
         # check for deleted peers - make a copy to avoid dict size change during iteration
         existing_peers_copy = list(self._state.peers.items())
         for existing_peer_ip, existing_peer_info in existing_peers_copy:
             if existing_peer_ip not in self._peers.keys():
                 self._state.remove_peer(existing_peer_ip)
                 print(f"[Gossip] Removed peer: {existing_peer_ip}\n")
-        # print(f"[Gossip] Finished checking for changes in peers RELEASE LOCK")
         self._state.lock_release()
         
         

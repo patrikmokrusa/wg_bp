@@ -63,7 +63,7 @@ python3 -u main.py broadcast --run --ip 10.0.0.3
 python3 -u main.py dnssd --run --ip 10.0.0.4
 ```
 
-- dnssd -  subprogram
+- dnssd - dnssd subprogram
 - --run - keep the program running
 - --ip - selected virtual ip
 

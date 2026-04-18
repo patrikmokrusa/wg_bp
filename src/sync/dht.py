@@ -149,7 +149,6 @@ class SyncDHT(SyncBase):
         Checks if there have been changes in the DHT by comparing the current change check value with the local one. 
         If there are changes, it triggers checkForChanges. 
         """
-        # print("[DHT] Checking for changes in DHT...")
         current_value = self._getValueSync(CHANGE_CHECK_KEY)
         if current_value != self._CurrentChangeCheckValue:
             if self._CurrentChangeCheckValue != -1:
@@ -219,7 +218,6 @@ class SyncDHT(SyncBase):
 
         self._setValueSync(self._state.ip, None)
 
-        # print(f"[DHT] Removed own peer info from DHT: {self._state.ip} ")
         old = self._getValueSync(CHANGE_CHECK_KEY)
         if old is None:
             old = -2
