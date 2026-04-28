@@ -5,8 +5,7 @@ To begin you start the program with initial arguments, and after that you can in
 
 ## Requirements
 
-Install WireGuard. [https://www.wireguard.com/install/](https://www.wireguard.com/install/)
-Install required libraries.
+Install [WireGuard](https://www.wireguard.com/install/) and install required libraries.
 
 ```bash
 sudo apt install wireguard
