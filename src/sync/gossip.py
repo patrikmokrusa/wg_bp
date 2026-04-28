@@ -151,7 +151,6 @@ class SyncGossip(SyncBase):
             self._send_lock.release()
             return
 
-        # Add timeout to connection attempt (e.g., 5 seconds)
         try:
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(peer_ip, peer_port), timeout=1
@@ -193,15 +192,6 @@ class SyncGossip(SyncBase):
         """ Publishes a change to the gossip state. """
         print(f"[Gossip] Publishing changes to Gossip network...")
         self._version += 1
-        msg = {
-            "type": STATE_UPDATE,
-            "version": self._version,
-            "virtual_ip": virtual_ip,
-            "public_key": public_key,
-            "endpoint_ip": endpoint_ip,
-            "endpoint_port": endpoint_port,
-            "sync_port": self._port
-        }
         self._peers[virtual_ip] = {
             "virtual_ip": virtual_ip,
             "public_key": public_key,

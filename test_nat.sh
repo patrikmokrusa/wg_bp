@@ -1,4 +1,5 @@
 #!/bin/bash
+# created using method from this article: https://pancho.dev/posts/linux-router-with-containers/
 
 if [ "$1" == "clean" ]; then
     echo "Cleaning up..."

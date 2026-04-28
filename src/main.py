@@ -16,7 +16,7 @@ parser = argparse.ArgumentParser()
 subparsers = parser.add_subparsers(required=True)
 
 def add_common_args(p):
-    p.add_argument('--run', action='store_true', help='Run the network after joining/creating')
+    # p.add_argument('--run', action='store_true', help='Run the network after joining/creating')
     p.add_argument('--ip', required=True, type=str, help='Virtual IP address to use')
     p.add_argument('--port', type=int, default=51820, help='Port for the network')
     p.add_argument('--interface', type=str, default='wg0', help='Network interface name')
@@ -57,7 +57,7 @@ def join_direct(args):
         sync_gossip = SyncGossip(state, seed_node=gossip_info["sync-seed"], port=args.sync_port+1)
         sync = AllSync(state, [sync_dht, sync_gossip, sync_mq])
         
-    return state, sync, args.run
+    return state, sync
 
 broadcast_parser = subparsers.add_parser('broadcast', help='Broadcast to existing network to join')
 add_common_args(broadcast_parser)
@@ -91,7 +91,7 @@ def broadcast_discover(args):
         sync_gossip = SyncGossip(state, seed_node=gossip_info["sync-seed"], port=args.sync_port+1)
         sync = AllSync(state, [sync_dht, sync_gossip, sync_mq])
         
-    return state, sync, args.run
+    return state, sync
 
 dnssd_parser = subparsers.add_parser('dnssd', help='join using DNSSD discovery')
 add_common_args(dnssd_parser)
@@ -107,15 +107,15 @@ def dnssd_discover(args):
         if info["type"] == "JOIN":
             args.bootstrap_port = info["port"]
             args.target_host = info["ip"]
-            state, sync, run_flag = join_direct(args)
+            state, sync = join_direct(args)
         elif info["type"] == "BROADCAST":
             args.bootstrap_port = info["port"]
-            state, sync, run_flag = broadcast_discover(args)
+            state, sync = broadcast_discover(args)
         else:
             print("Unknown service type discovered via DNSSD.")
             exit(1)
 
-    return state, sync, run_flag
+    return state, sync
     
 
 
@@ -151,28 +151,30 @@ def create(args):
     print(state.get_config())
     
     
-    return state, sync, args.run
+    return state, sync
 
 
 def main():
     args = parser.parse_args()
     
     if args.func == 'join-direct':
-        state, sync, run_flag = join_direct(args)
+        state, sync = join_direct(args)
     elif args.func == 'create':
-        state, sync, run_flag = create(args)
+        state, sync = create(args)
     elif args.func == 'broadcast_discover':
-        state, sync, run_flag = broadcast_discover(args)
+        state, sync = broadcast_discover(args)
     elif args.func == 'dnssd_discover':
-        state, sync, run_flag = dnssd_discover(args)
+        state, sync = dnssd_discover(args)
     
+    run_flag = True
+
     disc_join = None
     disc_bcast = None
     ad = None
 
-    help_msg = """Available commands:
+    help_msg = """
+Available commands:
 - exit : Exit the program
-- return : Return to shell without stopping the network
 - discover-join : Start accepting discovery join requests
 - discover-broadcast : Start listening for broadcast requests
 - advertise : Advertise direct joinability using DNSSD
@@ -182,7 +184,11 @@ def main():
 """
     print(help_msg)
     while run_flag:
-        input_val = input()
+        try:
+            input_val = input()
+        except:
+            input_val = "exit"
+
         if input_val == "exit": # exit or ctrl + c
             if disc_join:
                 disc_join.stopAccept()
@@ -200,9 +206,9 @@ def main():
                 ad.stopAdvertise()
             break
 
-        if input_val == "return": # return to shell
-            # stop and leave config intact
-            break
+        # if input_val == "return": # return to shell
+        #     # stop and leave config intact
+        #     break
         elif input_val == "help":
             print(help_msg)
 
@@ -277,8 +283,8 @@ def main():
         elif input_val == "hang":
             while True:
                 time.sleep(1)
-
         elif input_val == "ping":
             state.ping_all_peers()
+
 if __name__ == "__main__":
     main()

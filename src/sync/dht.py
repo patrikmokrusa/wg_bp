@@ -212,7 +212,7 @@ class SyncDHT(SyncBase):
 
     def exitSync(self) -> None:
         """ Exits and cleans up the synchronization module. """
-        print("[DHT] Exiting DHT synchronization...")
+        print("[DHT] Exiting DHT synchronization... might take a while")
         if self.termination_event:
             self._loop.call_soon_threadsafe(self.termination_event.set)
 
