@@ -42,7 +42,8 @@ class MessageQueueSync(SyncBase):
             "public_key": self._state.public_key,
             "endpoint_ip": self._state.public_ip,
             "endpoint_port": self._state.public_port,
-            "sync_port": self._port
+            "sync_port": self._port,
+            "allowed_ips": self._state.allowed_ips
         }
 
         if seed_node:
@@ -129,14 +130,20 @@ class MessageQueueSync(SyncBase):
                 print(f"[MQ] Self-fix: Removing peer {peer_ip} which is not in state peers")
                 del self._peers[peer_ip]
 
-    def publishChange(self, virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int, sync_port: int | None = None) -> None:
+    def publishChange(self, virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int, 
+                      allowed_ips: list | None = None, sync_port: int | None = None) -> None:
         """ Publishes a change to the MQ state."""
-        self._peers[virtual_ip] = {
+        val = {
             "virtual_ip": virtual_ip,
             "public_key": public_key,
             "endpoint_ip": endpoint_ip,
-            "endpoint_port": endpoint_port,
+            "endpoint_port": endpoint_port
         }
+        if allowed_ips:
+            val["allowed_ips"] = allowed_ips
+        else:
+            val["allowed_ips"] = [virtual_ip + "/32"]
+        self._peers[virtual_ip] = val
         if sync_port:
             self._peers[virtual_ip]["sync_port"] = sync_port
             self._sub.connect(f"tcp://{virtual_ip}:{sync_port}")
@@ -200,8 +207,9 @@ class MessageQueueSync(SyncBase):
                 print(f"[MQ] Added new peer: {peer_ip}")
 
             else:
-                if self.check_individual_peer_change(peer_info, existing_peer):
-                    print(f"[MQ] Detected change in peer {peer_ip}")
+                if peer_info["allowed_ips"] != existing_peer["allowed_ips"]:
+                    self._state.set_peer_AllowedIPs(peer_info["virtual_ip"], peer_info["allowed_ips"])
+                    print(f"[MQ] Updated allowed IPs for {peer_info['virtual_ip']}.")
 
         existing_peers_copy = list(self._state.peers.items())
         for existing_peer_ip, existing_peer_info in existing_peers_copy:

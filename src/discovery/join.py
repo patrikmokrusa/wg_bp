@@ -126,7 +126,7 @@ class DiscoveryJoin(DiscoveryBase):
                 # port,
                 content['public_ip'],
                 content['port'],
-                content['sync_port']
+                sync_port=content['sync_port']
             )
 
             client.send(b"OK")  # confirmation because gossip

@@ -95,7 +95,7 @@ class DiscoveryBroadcast(DiscoveryBase):
                     content['public_key'],
                     content['public_ip'],
                     content['port'],
-                    content['sync_port']
+                    sync_port=content['sync_port']
                 )
         else:
             response = {

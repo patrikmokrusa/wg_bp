@@ -37,10 +37,11 @@ class AllSync(SyncBase):
         """This module does not check for changes itself. Its here because of Abstract Base Class. """
         pass
     
-    def publishChange(self, virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int, sync_port: int | None=None) -> None:
+    def publishChange(self, virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int, 
+                      allowed_ips: list | None = None, sync_port: int | None = None) -> None:
         """ Publishes a change to all synchronization modules in the list. """
         for sync in self._sync_list:
-            sync.publishChange(virtual_ip, public_key, endpoint_ip, endpoint_port, sync_port)
+            sync.publishChange(virtual_ip, public_key, endpoint_ip, endpoint_port, allowed_ips=allowed_ips, sync_port=sync_port)
 
     def exitSync(self) -> None:
         """ Exits and cleans up all synchronization modules in the list. """

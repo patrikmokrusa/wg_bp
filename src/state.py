@@ -39,7 +39,7 @@ class State:
     """
     Represents the actual state of the WireGuard interface and its peers.
     """
-    def __init__(self, ip: str, port: int = 51820, interface: str = "wg0", keepalive: int = 25, forwarded_port: int | None = None) -> None:
+    def __init__(self, ip: str, port: int = 51820, interface: str = "wg0", keepalive: int = 25, prefix: int = 24, forwarded_port: int | None = None) -> None:
         """ 
         Constructor for the State class. Creates key pair, gets public IP, initializes netlink and WireGuard interface. 
         
@@ -48,6 +48,7 @@ class State:
             port: The port for the WireGuard interface. Default is 51820.
             interface: The name of the WireGuard interface. Default is "wg0".
             keepalive: The persistent keepalive for WireGuard peers. Default is 25.
+            prefix: The subnet prefix length for the WireGuard interface. Default is 24.
             forwarded_port: The port forwarded to the WireGuard interface (If set overrides the Stun public port). Default is None.
 
         """
@@ -68,11 +69,15 @@ class State:
         self._keepalive = keepalive
         self.public_ip = None
         """ The public IP address determined by STUN. """
+        self.prefix = prefix
+        """ The subnet prefix length for the WireGuard interface. """
         self.public_port = None
         """ The public port determined by STUN. """
         self._update_public_ip()
         self._iplinkInit()
         self._lock = threading.Lock()
+
+        self.allowed_ips = [f"{self.ip}/32"]
 
     def lock_aquire(self, requester) -> None:
         """ Acquires the state lock. Should be used when modifying the state to prevent collisions between different modules."""
@@ -92,7 +97,7 @@ class State:
 
         idx = self.ipr.link_lookup(ifname=self.interface)[0]
 
-        self.ipr.addr("add", index=idx, address=self.ip, prefixlen=24)
+        self.ipr.addr("add", index=idx, address=self.ip, prefixlen=self.prefix)
 
         self._wgInit()
 
@@ -177,9 +182,6 @@ class State:
                     continue
 
                 return mapped_addr[1], mapped_addr[2]
-                if mapped_addr[0] == 'Symmetric NAT':
-                    print("[STATE] Symmetric NAT detected. Direct UDP hole punching may fail.")
-                return
             except Exception as e:
                 print(f"[STATE] STUN lookup failed via {stun_host}:{stun_port}: {e}")
 
@@ -242,7 +244,12 @@ class State:
         """ Adds a peer to the state and WireGuard configuration. """
         if peer_virtual_ip == self.ip:
             return
-        self.peers[peer_virtual_ip] = {"public_key": public_key, "endpoint_ip": endpoint_ip, "endpoint_port": endpoint_port}
+        self.peers[peer_virtual_ip] = {
+            "public_key": public_key, 
+            "endpoint_ip": endpoint_ip, 
+            "endpoint_port": endpoint_port,
+            "allowed_ips": self._getAllowedIPs(peer_virtual_ip)
+            }
 
         self._wgSetOwnEventLoop(
             self.interface,
@@ -257,13 +264,42 @@ class State:
         print(self.get_config())
         print(f"[STATE] Added peer {peer_virtual_ip}")
 
+    def add_allowed_ip(self, allowed_ip: str) -> None:
+        """ Adds an allowed IP for the local node. """
+        if allowed_ip not in self.allowed_ips:
+            self.allowed_ips.append(allowed_ip)
+            print(f"[STATE] Added allowed IP {allowed_ip} to local node.")
+
+    def remove_allowed_ip(self, allowed_ip: str) -> None:
+        """ Removes an allowed IP for the local node. """
+        if allowed_ip in self.allowed_ips:
+            self.allowed_ips.remove(allowed_ip)
+            print(f"[STATE] Removed allowed IP {allowed_ip} from local node.")
+
+    def set_peer_AllowedIPs(self, peer_virtual_ip: str, allowed_ips: list) -> None:
+        """ Updates the allowed IPs for a peer in the state and WireGuard configuration. """
+
+        self.peers[peer_virtual_ip]["allowed_ips"] = allowed_ips
+
+        self._wgSetOwnEventLoop(
+            self.interface,
+            peer={
+                "public_key": self.peers[peer_virtual_ip]["public_key"].strip(),
+                "allowed_ips": allowed_ips,
+                "endpoint_addr": self.peers[peer_virtual_ip]["endpoint_ip"],
+                "endpoint_port": self.peers[peer_virtual_ip]["endpoint_port"],
+                "persistent_keepalive": self._keepalive
+            }
+        )
+        print(f"[STATE] Updated peer {peer_virtual_ip} allowed IPs to {allowed_ips}")
+
     def _getAllowedIPs(self, peer_virtual_ip: str) -> list:
-        """ Helper method to parse allowed IP for peers when adding them. """
+        """ Helper method to parse allowed IP for peers when initialy adding them. """
         allowed_ips = []
         if "/" in peer_virtual_ip:
             allowed_ips.append(peer_virtual_ip)
         else:
-            # Each peer should own only its host address in WireGuard cryptokey routing.
+            # Each peer defaultly owns only its host address in WireGuard cryptokey routing.
             allowed_ips.append(peer_virtual_ip + "/32")
         return allowed_ips
 
@@ -299,7 +335,7 @@ class State:
         for peer_ip, peer_info in self.peers.items():
             config += "[Peer]\n"
             config += f"PublicKey = {peer_info['public_key']}\n"
-            config += f"AllowedIPs = {peer_ip}\n"
+            config += f"AllowedIPs = {peer_info['allowed_ips']}\n"
             config += f"Endpoint = {peer_info['endpoint_ip']}:{peer_info['endpoint_port']}\n"
             config += f"PersistentKeepalive = {self._keepalive}\n\n"
         
@@ -330,9 +366,6 @@ class State:
         """ Brings the WireGuard interface down using netlink. Only brings it down, does not delete it.  """
         idx = self.ipr.link_lookup(ifname=self.interface)[0]
         self.ipr.link("set", index=idx, state="down")
-
-    
-
 
     def interface_json(self)-> dict:
         """ Returns information about the interface. Used for discovery purposes. """

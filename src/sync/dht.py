@@ -58,7 +58,8 @@ class SyncDHT(SyncBase):
                 "virtual_ip": self._state.ip,
                 "public_key": self._state.public_key,
                 "endpoint_ip": self._state.public_ip,
-                "endpoint_port": self._state.public_port
+                "endpoint_port": self._state.public_port,
+                "allowed_ips": self._state.allowed_ips
             })
 
 
@@ -74,7 +75,8 @@ class SyncDHT(SyncBase):
                 "virtual_ip": self._state.ip,
                 "public_key": self._state.public_key,
                 "endpoint_ip": self._state.public_ip,
-                "endpoint_port": self._state.public_port
+                "endpoint_port": self._state.public_port,
+                "allowed_ips": self._state.allowed_ips
             })
             print(f"[DHT] DHT server started on port:{self._port}")
 
@@ -125,16 +127,24 @@ class SyncDHT(SyncBase):
         }
         return info
 
-    def publishChange(self, virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int, sync_port: int | None = None) -> None:
+    def publishChange(self, virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int, 
+                      allowed_ips: list | None = None, sync_port: int | None = None) -> None:
         """ Publishes a change to the DHT. """
         print("[DHT] Publishing changes to DHT...")
 
-        self._setValueSync(virtual_ip, {
+        val = {
             "virtual_ip": virtual_ip,
             "public_key": public_key,
             "endpoint_ip": endpoint_ip,
             "endpoint_port": endpoint_port
-        })
+        }
+
+        if allowed_ips:
+            val["allowed_ips"] = allowed_ips
+        else:
+            val["allowed_ips"] = [virtual_ip + "/32"]
+
+        self._setValueSync(virtual_ip, val)
 
         old = self._getValueSync(CHANGE_CHECK_KEY)
         self._setValueSync(CHANGE_CHECK_KEY, old + 1)
@@ -205,7 +215,9 @@ class SyncDHT(SyncBase):
 
             if peer_info == None:
                 continue
-            self.check_individual_peer_change(peer_info, existing_peer)
+            if peer_info["allowed_ips"] != existing_peer["allowed_ips"]:
+                self._state.set_peer_AllowedIPs(peer_info["virtual_ip"], peer_info["allowed_ips"])
+                print(f"[DHT] Updated allowed IPs for {peer_info['virtual_ip']}.")
         
         self._state.lock_release()
 

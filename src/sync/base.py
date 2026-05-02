@@ -4,7 +4,7 @@ import abc
 class SyncBase(abc.ABC):
 
     @abc.abstractmethod
-    def publishChange(self, virtual_ip, public_key, endpoint_ip, endpoint_port, sync_port=None):
+    def publishChange(self, virtual_ip, public_key, endpoint_ip, endpoint_port, allowed_ips, sync_port=None):
         pass
 
     @abc.abstractmethod
@@ -22,24 +22,4 @@ class SyncBase(abc.ABC):
         pass
 
 
-    def check_individual_peer_change(self, peer_info, existing_peer):
-        if (peer_info["public_key"] != existing_peer["public_key"] or
-                peer_info["endpoint_ip"] != existing_peer["endpoint_ip"] or
-                peer_info["endpoint_port"] != existing_peer["endpoint_port"]):
-                self.state.remove_peer(peer_info["virtual_ip"])
-                self.state.add_peer(
-                    peer_info["virtual_ip"],
-                    peer_info["public_key"],
-                    peer_info["endpoint_ip"],
-                    peer_info["endpoint_port"]
-                )
-                print(f"""
-                      Updated via sync:
-                      Before:
-                      {peer_info['virtual_ip']} -> {existing_peer}
-                      After:
-                      {peer_info['virtual_ip']} -> {peer_info}
-                      """)
-                return True
-        return False
     
