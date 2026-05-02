@@ -37,8 +37,8 @@ class DiscoveryBroadcast(DiscoveryBase):
     def stopAccept(self) -> None:
         """ Stops listening and closes the socket. """
         self._running = False
-        self._socket.shutdown(socket.SHUT_RDWR)
         self._socket.close()
+        
 
     def startAccept(self) -> None:
         """ Starts listening for broadcast messages in a separate thread. """
@@ -47,13 +47,16 @@ class DiscoveryBroadcast(DiscoveryBase):
 
     def _broadcastAcceptLoop(self) -> None:
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self._socket.settimeout(1)
         self._socket.bind(("", self._bootstrap_port))
         print(f"[BCAST] Listening for broadcast messages on port {self._bootstrap_port}...")
         while self._running:
             try:
                 data, addr = self._socket.recvfrom(1024)
+            except socket.timeout:
+                continue
             except Exception as e:
-                print(f"[BCAST] Socket closed, stopping broadcast accept loop. error: {e}")
+                print(f"[BCAST] Socket closed, stopping broadcast accept loop.")
                 return
             
             if self._running:

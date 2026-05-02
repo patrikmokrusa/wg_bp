@@ -157,7 +157,7 @@ class DiscoveryJoin(DiscoveryBase):
             }
             sock.send(str(msg).encode('utf-8'))
             response = sock.recv(4096)
-            print(f"[JOIN] Received: {response.decode('utf-8')}")
+            print(f"[JOIN] Received response.")
             type, status, content, sync = self._parse_response_msg(response.decode('utf-8'))
             if type == "ERROR":
                 print(f"[JOIN] Error during JOIN: {status}")

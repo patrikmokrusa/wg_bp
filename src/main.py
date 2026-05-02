@@ -21,7 +21,7 @@ def add_common_args(p):
     p.add_argument('--port', type=int, default=51820, help='Port for the network')
     p.add_argument('--interface', type=str, default='wg0', help='Network interface name')
     p.add_argument('--sync-port', type=int, default=6881, help='Port for synchronization service')
-    p.add_argument('--change-check-interval', type=int, default=10, help='Interval to check for changes in seconds')
+    p.add_argument('--change-check-interval', type=int, default=1, help='Interval to check for changes in seconds')
     p.add_argument('--forwarded-port', action='store_true', help='Is the port forwarded?')
 
 join_parser = subparsers.add_parser('join', help='Join an existing network')
@@ -175,9 +175,9 @@ def main():
     help_msg = """
 Available commands:
 - exit : Exit the program
-- discover-join : Start accepting discovery join requests
-- discover-broadcast : Start listening for broadcast requests
-- advertise : Advertise direct joinability using DNSSD
+- discover-join : Start accepting discovery join requests (toggle)
+- discover-broadcast : Start listening for broadcast requests (toggle)
+- advertise : Advertise direct joinability using DNSSD (toggle)
 - help : Show this help message
 - info : Show current state information
 - ping : Ping all peers in the network
@@ -206,9 +206,6 @@ Available commands:
                 ad.stopAdvertise()
             break
 
-        # if input_val == "return": # return to shell
-        #     # stop and leave config intact
-        #     break
         elif input_val == "help":
             print(help_msg)
 
@@ -255,7 +252,7 @@ Available commands:
 
         elif input_val == "discover-broadcast" or input_val == "dis-bcast":
             try:
-                if disc_bcast is not None or (disc_bcast is not None and disc_bcast.running):
+                if disc_bcast:
                     print("Stopping previous discovery broadcast...")
                     disc_bcast.stopAccept()
                     disc_bcast = None
@@ -272,7 +269,6 @@ Available commands:
             disc_bcast = DiscoveryBroadcast(state, sync, bootstrap_port=port)
             try:
                 disc_bcast.startAccept()
-
             except Exception as e:
                 print(f"Error in discovery broadcast: {e}")   
 
