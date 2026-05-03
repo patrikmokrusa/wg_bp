@@ -1,3 +1,4 @@
+# Autor: Patrik Mokruša (xmokrup00)
 from ast import literal_eval
 from .base import DiscoveryBase
 import socket

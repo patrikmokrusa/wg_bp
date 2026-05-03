@@ -1,4 +1,4 @@
-
+# Autor: Patrik Mokruša (xmokrup00)
 import threading
 import json
 import logging
@@ -204,7 +204,7 @@ class SyncDHT(SyncBase):
                     peer_info["endpoint_port"]
                 )
                 print(f"[DHT] Added new peer: {peer_info['virtual_ip']} -> {peer_info}")
-                continue
+                self._checkAllowedIPs(peer_info, self._state.peers.get(peer_info['virtual_ip']))
             
             except TypeError:
                 # Peer has been removed from DHT
@@ -215,12 +215,15 @@ class SyncDHT(SyncBase):
 
             if peer_info == None:
                 continue
-            if peer_info["allowed_ips"] != existing_peer["allowed_ips"]:
-                self._state.set_peer_AllowedIPs(peer_info["virtual_ip"], peer_info["allowed_ips"])
-                print(f"[DHT] Updated allowed IPs for {peer_info['virtual_ip']}.")
+            self._checkAllowedIPs(peer_info, existing_peer)
         
         self._state.lock_release()
 
+    def _checkAllowedIPs(self, peer_info: dict, existing_peer: dict) -> None:
+        """ Helper method to check if allowed IPs have changed and update them if necessary. """
+        if peer_info["allowed_ips"] != existing_peer["allowed_ips"]:
+            self._state.set_peer_AllowedIPs(peer_info["virtual_ip"], peer_info["allowed_ips"])
+            print(f"[DHT] Updated allowed IPs for {peer_info['virtual_ip']}.")
 
     def exitSync(self) -> None:
         """ Exits and cleans up the synchronization module. """

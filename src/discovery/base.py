@@ -1,3 +1,4 @@
+# Autor: Patrik Mokruša (xmokrup00)
 import abc
 from state import State
 

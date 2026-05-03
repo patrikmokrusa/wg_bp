@@ -1,3 +1,4 @@
+# Autor: Patrik Mokruša (xmokrup00)
 import json
 import threading
 import time
@@ -48,6 +49,7 @@ class MessageQueueSync(SyncBase):
 
         if seed_node:
             self._peers[seed_node['virtual_ip']] = seed_node
+            print(f"*************************{seed_node}***********************")
             self._sub.connect(f"tcp://{seed_node['virtual_ip']}:{seed_node['sync_port']}")
             print(f"[MQ] SUB connecting to tcp://{seed_node['virtual_ip']}:{seed_node['sync_port']}")
 
@@ -148,6 +150,10 @@ class MessageQueueSync(SyncBase):
             self._peers[virtual_ip]["sync_port"] = sync_port
             self._sub.connect(f"tcp://{virtual_ip}:{sync_port}")
             print(f"[MQ] SUB connecting to tcp://{virtual_ip}:{sync_port}")
+
+        if virtual_ip == self._state.ip: # to not break bootstrap when updating allowed ips
+            self._peers[virtual_ip]["sync_port"] = self._port
+        
         self._version += 1
         self._publishState()
 
@@ -205,11 +211,10 @@ class MessageQueueSync(SyncBase):
                 )
                 self._sub.connect(f"tcp://{peer_info['virtual_ip']}:{peer_info['sync_port']}")
                 print(f"[MQ] Added new peer: {peer_ip}")
+                self._checkAllowedIPs(peer_info, self._state.peers.get(peer_ip))
 
             else:
-                if peer_info["allowed_ips"] != existing_peer["allowed_ips"]:
-                    self._state.set_peer_AllowedIPs(peer_info["virtual_ip"], peer_info["allowed_ips"])
-                    print(f"[MQ] Updated allowed IPs for {peer_info['virtual_ip']}.")
+                self._checkAllowedIPs(peer_info, existing_peer)
 
         existing_peers_copy = list(self._state.peers.items())
         for existing_peer_ip, existing_peer_info in existing_peers_copy:
@@ -218,6 +223,12 @@ class MessageQueueSync(SyncBase):
                 print(f"[MQ] Removed peer: {existing_peer_ip}")
 
         self._state.lock_release()
+
+    def _checkAllowedIPs(self, peer_info: dict, existing_peer: dict) -> None:
+        """ Helper method to check if allowed IPs have changed and update them if necessary. """
+        if peer_info["allowed_ips"] != existing_peer["allowed_ips"]:
+            self._state.set_peer_AllowedIPs(peer_info["virtual_ip"], peer_info["allowed_ips"])
+            print(f"[MQ] Updated allowed IPs for {peer_info['virtual_ip']}.")
 
     def _publishLastMessage(self) -> None:
         """ Publishes a departure notice to other peers before shutting down. """

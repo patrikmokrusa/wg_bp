@@ -1,3 +1,4 @@
+# Autor: Patrik Mokruša (xmokrup00)
 from time import sleep
 
 from .base import DiscoveryBase

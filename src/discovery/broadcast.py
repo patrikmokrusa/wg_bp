@@ -1,3 +1,4 @@
+# Autor: Patrik Mokruša (xmokrup00)
 import socket
 import threading
 from state import State

@@ -1,3 +1,4 @@
+# Autor: Patrik Mokruša (xmokrup00)
 from ast import literal_eval
 import asyncio
 import threading
@@ -297,14 +298,11 @@ class SyncGossip(SyncBase):
                     peer_info["endpoint_port"]
                 )
                 print(f"[Gossip] Added new peer: {peer_ip}")
+                self._checkAllowedIPs(peer_info, self._state.peers.get(peer_ip))
             else:
-                # if self.check_individual_peer_change(peer_info, existing_peer):
-                #     reload_required = True
-                if peer_info["allowed_ips"] != existing_peer["allowed_ips"]:
-                    self._state.set_peer_AllowedIPs(peer_info["virtual_ip"], peer_info["allowed_ips"])
-                    print(f"[Gossip] Updated allowed IPs for {peer_info['virtual_ip']}.")    
+                self._checkAllowedIPs(peer_info, existing_peer)    
 
-        # check for deleted peers - make a copy to avoid dict size change during iteration
+        # check for deleted peers
         existing_peers_copy = list(self._state.peers.items())
         for existing_peer_ip, existing_peer_info in existing_peers_copy:
             if existing_peer_ip not in self._peers.keys():
@@ -312,4 +310,9 @@ class SyncGossip(SyncBase):
                 print(f"[Gossip] Removed peer: {existing_peer_ip}\n")
         self._state.lock_release()
         
+    def _checkAllowedIPs(self, peer_info: dict, existing_peer: dict) -> None:
+        """ Helper method to check if allowed IPs have changed and update them if necessary. """
+        if peer_info["allowed_ips"] != existing_peer["allowed_ips"]:
+            self._state.set_peer_AllowedIPs(peer_info["virtual_ip"], peer_info["allowed_ips"])
+            print(f"[Gossip] Updated allowed IPs for {peer_info['virtual_ip']}.")
         

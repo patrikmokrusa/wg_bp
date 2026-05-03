@@ -1,3 +1,7 @@
+# Autor: Patrik Mokruša (xmokrup00)
+"""
+.. include:: ../README.md
+"""
 import json
 import threading
 import time
@@ -21,7 +25,7 @@ def add_common_args(p):
     p.add_argument('--interface', type=str, default='wg0', help='Network interface name')
     p.add_argument('--prefix', type=int, default=24, help='Subnet prefix length for wg interface (e.g., 24 for /24)')
     p.add_argument('--sync-port', type=int, default=6881, help='Port for synchronization service')
-    p.add_argument('--change-check-interval', type=int, default=5, help='Interval to check for changes in seconds')
+    p.add_argument('--change-check-interval', type=int, default=1, help='Interval to check for changes in seconds')
     p.add_argument('--forwarded-port', action='store_true', help='Is the port forwarded?')
 
 join_parser = subparsers.add_parser('join', help='Join an existing network')
@@ -31,6 +35,7 @@ join_parser.add_argument('--bootstrap-port', type=int, default=17777, help='Boot
 join_parser.set_defaults(func='join-direct')
 
 def join_direct(args):
+    """ Function initialize program in direct join mode. """
     state = State(args.ip, port=args.port, interface=args.interface, prefix=args.prefix)
 
     dis = DiscoveryJoin(state, None, bootstrap_port=args.bootstrap_port)
@@ -65,6 +70,7 @@ broadcast_parser.add_argument('--bootstrap-port', type=int, default=18888, help=
 broadcast_parser.set_defaults(func='broadcast_discover')
 
 def broadcast_discover(args):
+    """ Function initialize program in broadcast discovery mode. """
     state = State(args.ip, port=args.port, interface=args.interface, prefix=args.prefix)
 
     dis = DiscoveryBroadcast(state, bootstrap_port=args.bootstrap_port, injected_sync=None)
@@ -98,6 +104,7 @@ add_common_args(dnssd_parser)
 dnssd_parser.set_defaults(func='dnssd_discover')
 
 def dnssd_discover(args):
+    """ Function initialize program in DNSSD discovery mode. """
     # state = State(args.ip, port=args.port, interface=args.interface)
 
     dis = DiscoveryDNSSD()
@@ -125,6 +132,7 @@ create_parser.add_argument('--sync', required=True, type=str, help='Synchronizat
 create_parser.set_defaults(func='create')
 
 def create(args):
+    """ Function initialize program in create mode. """
     f_port = None
     if args.forwarded_port:
         f_port = args.port
@@ -155,6 +163,7 @@ def create(args):
 
 
 def main():
+    """ Main function to parse arguments and start the program in the specified mode. """
     args = parser.parse_args()
     
     if args.func == 'join-direct':

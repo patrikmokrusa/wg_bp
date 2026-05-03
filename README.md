@@ -76,6 +76,21 @@ python3 main.py dnssd --ip 10.0.0.4
 
 After you can select discovery method you want to join through by its index.
 
+## Allowed IPs
+
+While in a network you can add allowed_ips, that are accessable through your node for other peers to route traficc through you.
+You can do this by typing:
+
+```
+add-allowed-ips
+```
+
+And to remove them:
+
+```
+remove-allowed-ips
+```
+
 ## Leaving network
 
 You can leave network by using Ctrl+C or by typing:

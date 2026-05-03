@@ -1,3 +1,4 @@
+# Autor: Patrik Mokruša (xmokrup00)
 from .base import SyncBase
 from .dht import SyncDHT
 from .gossip import SyncGossip
