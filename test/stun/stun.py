@@ -1,4 +1,4 @@
-
+# Autor: Patrik Mokruša (xmokrup00)
 import json
 import socket
 

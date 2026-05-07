@@ -24,9 +24,9 @@ def add_common_args(p):
     p.add_argument('--port', type=int, default=51820, help='Port for the network')
     p.add_argument('--interface', type=str, default='wg0', help='Network interface name')
     p.add_argument('--prefix', type=int, default=24, help='Subnet prefix length for wg interface (e.g., 24 for /24)')
-    p.add_argument('--sync-port', type=int, default=6881, help='Port for synchronization service')
-    p.add_argument('--change-check-interval', type=int, default=1, help='Interval to check for changes in seconds')
-    p.add_argument('--forwarded-port', action='store_true', help='Is the port forwarded?')
+    p.add_argument('--sync-port', type=int, default=6881, help='Port for synchronization service (takes range of ports <port-1;port+1> )')
+    p.add_argument('--interval', type=int, default=1, help='Time interval to check for changes in seconds')
+    p.add_argument('--forwarded-port', action='store_true', help='Is the port forwarded? When selected overrides port from STUN with --port value')
 
 join_parser = subparsers.add_parser('join', help='Join an existing network')
 join_parser.add_argument('target_host', type=str, help='Target host to join')
@@ -57,9 +57,9 @@ def join_direct(args):
     elif sync_info["sync-type"] == "ALL":
         print("Joining network with all synchronization methods enabled...")
         dht_info, gossip_info, mq_info = AllSync.splitInfo(sync_info)
-        sync_mq = MessageQueueSync(state, seed_node=mq_info["sync-seed"], port=args.sync_port, interval=args.change_check_interval)
-        sync_dht = SyncDHT(state, seed_node=(dht_info["sync-ip"], dht_info["sync-port"]), port=args.sync_port-1, interval=args.change_check_interval)
-        sync_gossip = SyncGossip(state, seed_node=gossip_info["sync-seed"], port=args.sync_port+1, interval=args.change_check_interval)
+        sync_mq = MessageQueueSync(state, seed_node=mq_info["sync-seed"], port=args.sync_port, interval=args.interval)
+        sync_dht = SyncDHT(state, seed_node=(dht_info["sync-ip"], dht_info["sync-port"]), port=args.sync_port-1, interval=args.interval)
+        sync_gossip = SyncGossip(state, seed_node=gossip_info["sync-seed"], port=args.sync_port+1, interval=args.interval)
         sync = AllSync(state, [sync_dht, sync_gossip, sync_mq])
         
     return state, sync
@@ -84,17 +84,17 @@ def broadcast_discover(args):
 
 
     if sync_info["sync-type"] == "DHT":
-        sync = SyncDHT(state, seed_node=(sync_info["sync-ip"], sync_info["sync-port"]), port=args.sync_port, interval=args.change_check_interval)
+        sync = SyncDHT(state, seed_node=(sync_info["sync-ip"], sync_info["sync-port"]), port=args.sync_port, interval=args.interval)
     elif sync_info["sync-type"] == "Gossip":
-        sync = SyncGossip(state, seed_node=sync_info["sync-seed"], port=args.sync_port, interval=args.change_check_interval)
+        sync = SyncGossip(state, seed_node=sync_info["sync-seed"], port=args.sync_port, interval=args.interval)
     elif sync_info["sync-type"] == "MQ":
-        sync = MessageQueueSync(state, seed_node=sync_info["sync-seed"], port=args.sync_port, interval=args.change_check_interval)
+        sync = MessageQueueSync(state, seed_node=sync_info["sync-seed"], port=args.sync_port, interval=args.interval)
     elif sync_info["sync-type"] == "ALL":
         print("Joining network with all synchronization methods enabled...")
         dht_info, gossip_info, mq_info = AllSync.splitInfo(sync_info)
-        sync_mq = MessageQueueSync(state, seed_node=mq_info["sync-seed"], port=args.sync_port, interval=args.change_check_interval)
-        sync_dht = SyncDHT(state, seed_node=(dht_info["sync-ip"], dht_info["sync-port"]), port=args.sync_port-1, interval=args.change_check_interval)
-        sync_gossip = SyncGossip(state, seed_node=gossip_info["sync-seed"], port=args.sync_port+1, interval=args.change_check_interval)
+        sync_mq = MessageQueueSync(state, seed_node=mq_info["sync-seed"], port=args.sync_port, interval=args.interval)
+        sync_dht = SyncDHT(state, seed_node=(dht_info["sync-ip"], dht_info["sync-port"]), port=args.sync_port-1, interval=args.interval)
+        sync_gossip = SyncGossip(state, seed_node=gossip_info["sync-seed"], port=args.sync_port+1, interval=args.interval)
         sync = AllSync(state, [sync_dht, sync_gossip, sync_mq])
         
     return state, sync
@@ -140,16 +140,16 @@ def create(args):
 
     sync = None
     if args.sync == "DHT":
-        sync = SyncDHT(state, port=args.sync_port, interval=args.change_check_interval)
+        sync = SyncDHT(state, port=args.sync_port, interval=args.interval)
     elif args.sync == "Gossip":
-        sync = SyncGossip(state, port=args.sync_port, interval=args.change_check_interval)
+        sync = SyncGossip(state, port=args.sync_port, interval=args.interval)
     elif args.sync == "MQ":
-        sync = MessageQueueSync(state, seed_node=None, port=args.sync_port, interval=args.change_check_interval)
+        sync = MessageQueueSync(state, seed_node=None, port=args.sync_port, interval=args.interval)
     elif args.sync == "ALL":
         print("Creating network with all synchronization methods enabled...")
-        sync_mq = MessageQueueSync(state, seed_node=None, port=args.sync_port+2, interval=args.change_check_interval)
-        sync_dht = SyncDHT(state, port=args.sync_port, interval=args.change_check_interval)
-        sync_gossip = SyncGossip(state, port=args.sync_port+1, interval=args.change_check_interval)
+        sync_mq = MessageQueueSync(state, seed_node=None, port=args.sync_port+2, interval=args.interval)
+        sync_dht = SyncDHT(state, port=args.sync_port, interval=args.interval)
+        sync_gossip = SyncGossip(state, port=args.sync_port+1, interval=args.interval)
         sync = AllSync(state, [sync_dht, sync_gossip, sync_mq])
     else:
         print("Unsupported synchronization method specified.")
@@ -192,6 +192,7 @@ Available commands:
 - ping : Ping all peers in the network
 - add-allowed-ips : Add an allowed IP to local node for other peers to route through this node
 - remove-allowed-ips : Remove an allowed IP from local node
+- force-check : Force synchronization module to check for changes and update peers immediately
 """
     print(help_msg)
     while run_flag:
@@ -202,15 +203,18 @@ Available commands:
 
         if input_val == "exit": # exit or ctrl + c
             if disc_join:
-                disc_join.stopAccept()
+                try:
+                    disc_join.stopAccept()
+                except Exception as e:
+                    print(f"Error occurred while stopping discovery join: {e}")
             if disc_bcast:
                 try:
                     disc_bcast.stopAccept()
                 except OSError as e:
                     if e.errno != 107:  # Ignore "Transport endpoint is not connected"
-                        print(f"Error occurred while stopping discovery: {e}")
+                        print(f"Error occurred while stopping discovery broadcast: {e}")
                 except Exception as e:
-                    print(f"Error occurred while stopping discovery: {e}")
+                    print(f"Error occurred while stopping discovery broadcast: {e}")
             sync.exitSync()
             state.disableNetlink()
             if ad:
@@ -278,6 +282,7 @@ Available commands:
                     continue
             except Exception as e:
                 print(f"Failed to start join: {e}")
+                disc_join = None
                 continue
 
             port = input("Enter port for discovery join (default 17777): ")
@@ -297,6 +302,7 @@ Available commands:
                     continue
             except Exception as e:
                 print(f"Failed to start broadcast join: {e}")
+                disc_bcast = None
                 continue
 
             port = input("Enter port for discovery broadcast (default 18888): ")
@@ -308,7 +314,12 @@ Available commands:
             try:
                 disc_bcast.startAccept()
             except Exception as e:
-                print(f"Error in discovery broadcast: {e}")   
+                print(f"Error in discovery broadcast: {e}")
+                disc_bcast = None
+
+        elif input_val == "force-check":
+            print("Forcing synchronization module to check for changes...")
+            sync.checkForChanges()
 
         elif input_val == "wait":
             # testing feature

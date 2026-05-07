@@ -1,5 +1,7 @@
 # wg_bp
 
+This script is a tool to create mesh WireGuard networks, configure and synchronize state across peers.
+
 You can eighter create or join a network.
 To begin you start the program with initial arguments, and after that you can interact with it through TTY inputs.
 
@@ -50,7 +52,7 @@ You can start discovery modules just like the create peer after you join the net
 ### Direct join
 
 ```bash
-python3 main.py join create_peer --ip 10.0.0.2
+python3 main.py join <peer_ip> --ip 10.0.0.2
 ```
 
 - join - direct join subprogram
@@ -99,6 +101,21 @@ You can leave network by using Ctrl+C or by typing:
 exit
 ```
 
+## Limitations
+
+Script only works when not behind SYMETRIC-NAT or behind network components that act like one. Port scanning is not implemented it uses the public ip and port discovered from STUN.
+In theese situations you need to manualy add mapping to the wireguard port on your router.
+
+If 2 nodes are in the same private network and want to connect, your router needs to support NAT loopback or Hairpin NAT so theese nodes are accesible through their public address even within their private network. The router doesnt try to find peers private ips.
+
+DHT module sometimes struggles when repeatadly joining and leaving a network. Its because it takes a while to clearout its routing table from disconected peers.
+
+## Customization
+
+* src/state - STUN_SERVERS - You can change the queried public stun servers.
+* src/state - CUSTOM_STUN_SERVERS - You can change the queried custom test server (test/stun/stun.py) or leave blank if you dont want to contact them.
+* src/sync/gossip - DEGREE - You can define the degree of gossip (number of peers contacted in each cycle).
+
 ## Testing
 
 Running tests requires having Docker and docker-compose installed.
@@ -116,7 +133,7 @@ To run this test first build the containers:
 and run the test using your inputed synchronization module. (DHT, MQ, Gossip, ALL)
 
 ```bash
-./test_sync.sh all <your module>
+./test_sync.sh all <chosen module>
 ```
 
 To clean run:
@@ -179,4 +196,39 @@ python3 src/main.py broadcast --ip 10.0.0.2 --port 51821 --interface wg1 --sync-
 
 # joinging using dnssd
 python3 src/main.py dnssd --ip 10.0.0.2 --port 51821 --interface wg1 --sync-port 6888
+```
+
+* localhost can only be run with 2 peers, because WireGuard doesnt allow same peer on 2 different interfaces
+
+### Running program in test NAT enviroment
+
+If you want to try the program out i provided a Linux VM image.
+
+Once you are in the VM build the containers using
+
+```bash
+docker-compose -f docker-compose-norun.yaml build
+```
+
+and run them
+
+```bash
+./test_nat.sh norun
+```
+
+It runs the testing STUN server and starts the containers without running the program.
+
+To interact with the containers use `docker ps` to show the name of containers and connect to them using
+
+```bash
+# connecting to client b
+docker exec -it sf_wg_bp_client-b_1 bash
+```
+
+Once you are connected you can start the script.
+
+To cleanup use
+
+```bash
+./test_nat.sh clean norun
 ```

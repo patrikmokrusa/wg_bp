@@ -1,0 +1,39 @@
+.
+├── LICENSE - MIT License
+├── README.md - project overview and instructions
+├── docs - API documentation generated using pdoc
+├── repo-tree.txt - this file
+├── requirements.txt - Python dependencies
+├── src - source code of the application
+│   ├── discovery - discovery modules
+│   │   ├── base.py
+│   │   ├── broadcast.py
+│   │   ├── dnssd.py
+│   │   └── join.py
+│   ├── main.py - entry point of the application
+│   ├── state.py - module for managing local node state
+│   └── sync - synchronization modules
+│       ├── all_sync.py
+│       ├── base.py
+│       ├── dht.py
+│       ├── gossip.py
+│       └── mq.py
+├── test - test scenarios and Dockerfiles + stun server
+│   ├── Dockerfile.main
+│   ├── Dockerfile.router
+│   ├── create-nat-scenario.txt
+│   ├── create-scenario.txt
+│   ├── create_script.sh
+│   ├── join-dnssd_scenario.txt
+│   ├── join-exit_scenario.txt
+│   ├── join-hang_scenario.txt
+│   ├── join_bcast_script.sh
+│   ├── join_direct_script.sh
+│   ├── join_dnssd_script.sh
+│   └── stun - my stun server for testing
+│       ├── Dockerfile.stun
+│       └── stun.py
+├── docker-compose.yaml - Docker Compose configuration for NAT scenario test
+├── test_nat.sh - script to run the NAT scenario test
+├── test_sync.sh - script to run the synchronization test
+

@@ -3,14 +3,23 @@
 
 if [ "$1" == "clean" ]; then
     echo "Cleaning up..."
-    docker-compose down
+    if [ "$2" == "norun" ]; then
+        docker-compose -f docker-compose-norun.yaml down
+    else
+        docker-compose down
+    fi
+    # docker-compose down
     rm -rf /var/run/netns/*
     exit 0
 fi
 
 echo "This script only works on linux"
 
-docker-compose up -d
+if [ "$1" == "norun" ]; then
+    docker-compose -f docker-compose-norun.yaml up -d
+else
+    docker-compose up -d
+fi
 
 echo "Setting up network for containers..."
 # Get the container id for each container (will be needed later)

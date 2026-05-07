@@ -46,16 +46,6 @@ services:
       context: .
       dockerfile: test/Dockerfile.router
     privileged: true
-    # command: >
-    #     sh -c "
-    #           sleep 3;
-    #           iptables -A FORWARD -j ACCEPT;
-    #           iptables -t nat -A PREROUTING -i eth1 -p udp -j DNAT --to-destination 192.168.1.2;
-    #           iptables -t nat -A POSTROUTING -o eth1 -p udp -j SNAT --to-source 172.20.4.2;
-    #           iptables -t nat -A PREROUTING -i eth1 -p tcp -j DNAT --to-destination 192.168.1.2;
-    #           iptables -t nat -A POSTROUTING -o eth1 -p tcp -j SNAT --to-source 172.20.4.2;
-    #           tail -f /dev/null"
-
     # NAT
     command: >
         sh -c "
@@ -87,16 +77,6 @@ services:
       context: .
       dockerfile: test/Dockerfile.router
     privileged: true
-    # command: >
-    #     sh -c "
-    #           sleep 3;
-    #           iptables -A FORWARD -j ACCEPT;
-    #           iptables -t nat -A PREROUTING -i eth1 -p udp -j DNAT --to-destination 192.168.2.2;
-    #           iptables -t nat -A POSTROUTING -o eth1 -p udp -j SNAT --to-source 172.20.1.2;
-    #           iptables -t nat -A PREROUTING -i eth1 -p tcp -j DNAT --to-destination 192.168.2.2;
-    #           iptables -t nat -A POSTROUTING -o eth1 -p tcp -j SNAT --to-source 172.20.1.2;
-    #           tail -f /dev/null"
-
     # NAT
     command: >
         sh -c "

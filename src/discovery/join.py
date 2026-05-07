@@ -99,7 +99,7 @@ class DiscoveryJoin(DiscoveryBase):
             client.send(str(response).encode('utf-8'))
             
         else:
-            
+            self._state.lock_aquire(self)
             print(f"[JOIN] Adding new peer with IP {content['ip']}:{content['port']}")
             self._state.add_peer(
                 content["ip"],
@@ -129,8 +129,9 @@ class DiscoveryJoin(DiscoveryBase):
                 content['port'],
                 sync_port=content['sync_port']
             )
-
+            
             client.send(b"OK")  # confirmation because gossip
+            self._state.lock_release()
 
         client.close()
 

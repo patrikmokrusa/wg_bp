@@ -15,7 +15,7 @@ from cryptography.hazmat.primitives import serialization
 
 STUN_SERVERS = [
     ("stun.l.google.com", 19302),
-    ("stunserver2025.stunprotocol.org", 3478),
+    ("stun.nextcloud.com", 443),
     ("stun1.l.google.com", 19302),
 ]
 """ List of public STUN servers. """
@@ -25,8 +25,8 @@ CUSTOM_STUN_PORT = 9999
 
 
 CUSTOM_STUN_SERVERS = [
-    ("172.20.2.2", CUSTOM_STUN_PORT), # TRUELY NATED DOCKER COMPOSE test_sync
-    ("stun", CUSTOM_STUN_PORT), # stun container in same network test_nat
+    ("172.20.2.2", CUSTOM_STUN_PORT), # TRUELY NATED DOCKER COMPOSE test_nat
+    ("stun", CUSTOM_STUN_PORT), # stun container in same network test_sync
     ("127.0.0.1", CUSTOM_STUN_PORT), # localhost
     # ("172.18.0.1", CUSTOM_STUN_PORT), # docker no fw
     # ("10.10.2.104", CUSTOM_STUN_PORT), # host machine

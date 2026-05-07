@@ -29,12 +29,12 @@ class MessageQueueSync(SyncBase):
         self._peers = {}  # virtual_ip -> peer info
         self._version = 0
 
-        self._pub_context = zmq.Context()
-        self._pub = self._pub_context.socket(zmq.PUB)
+        self._context = zmq.Context()
+        self._pub = self._context.socket(zmq.PUB)
         self._pub.bind(f"tcp://{self._state.ip}:{self._port}")
         print(f"[MQ] PUB bound to tcp://{self._state.ip}:{self._port}")
         self._sub_context = zmq.Context()
-        self._sub = self._sub_context.socket(zmq.SUB)
+        self._sub = self._context.socket(zmq.SUB)
         self._sub.setsockopt_string(zmq.SUBSCRIBE, "")
 
         # add self to peers list
@@ -49,7 +49,6 @@ class MessageQueueSync(SyncBase):
 
         if seed_node:
             self._peers[seed_node['virtual_ip']] = seed_node
-            print(f"*************************{seed_node}***********************")
             self._sub.connect(f"tcp://{seed_node['virtual_ip']}:{seed_node['sync_port']}")
             print(f"[MQ] SUB connecting to tcp://{seed_node['virtual_ip']}:{seed_node['sync_port']}")
 
@@ -111,6 +110,7 @@ class MessageQueueSync(SyncBase):
                 elif data["type"] == DEPARTURE_NOTICE:
                     print(f"[MQ] Received {data['type']} from peer {data['from']}.")
                     del self._peers[data["virtual_ip"]]
+                    self._sub.disconnect(f"tcp://{data['from']}")
                     self._version += 1
                     self._selfFix() # so i dont add back deleted peers by other modules in ALL sync
                     self.checkForChanges()
@@ -130,6 +130,7 @@ class MessageQueueSync(SyncBase):
                 continue
             if peer_ip not in self._state.peers.keys():
                 print(f"[MQ] Self-fix: Removing peer {peer_ip} which is not in state peers")
+                self._sub.disconnect(f"tcp://{self._peers[peer_ip]['virtual_ip']}:{self._peers[peer_ip]['sync_port']}")
                 del self._peers[peer_ip]
 
     def publishChange(self, virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int, 
@@ -154,6 +155,7 @@ class MessageQueueSync(SyncBase):
         if virtual_ip == self._state.ip: # to not break bootstrap when updating allowed ips
             self._peers[virtual_ip]["sync_port"] = self._port
         
+        print(f"[MQ] Publishing changes to MQ...")
         self._version += 1
         self._publishState()
 
@@ -239,7 +241,7 @@ class MessageQueueSync(SyncBase):
         }
         print(f"[MQ] Publishing departure notice")
         self._pub.send_string(json.dumps(msg))
-        time.sleep(1) # give some time for message to be sent before shutting down sockets
+        time.sleep(2) # give some time for message to be sent before shutting down sockets
         
 
 
@@ -250,6 +252,5 @@ class MessageQueueSync(SyncBase):
         self.terminate_event.set()
         self.listen_task.cancel()
         self._sub.close()
-        self._sub_context.term()
         self._pub.close()
-        self._pub_context.term()
+        self._context.term()

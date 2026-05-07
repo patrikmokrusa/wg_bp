@@ -35,8 +35,9 @@ class AllSync(SyncBase):
         return dht_info, gossip_info, mq_info
 
     def checkForChanges(self) -> None:
-        """This module does not check for changes itself. Its here because of Abstract Base Class. """
-        pass
+        """ Checks for changes in all synchronization modules in the list. """
+        for sync in self._sync_list:
+            sync.checkForChanges()
     
     def publishChange(self, virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int, 
                       allowed_ips: list | None = None, sync_port: int | None = None) -> None:
