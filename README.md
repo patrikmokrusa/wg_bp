@@ -1,9 +1,27 @@
 # wg_bp
 
-This script is a tool to create mesh WireGuard networks, configure and synchronize state across peers.
+This script is a tool to create mesh WireGuard networks, configure them and synchronize state across peers.
 
 You can eighter create or join a network.
 To begin you start the program with initial arguments, and after that you can interact with it through TTY inputs.
+
+- [wg\_bp](#wg_bp)
+  - [Requirements](#requirements)
+  - [Creating a network](#creating-a-network)
+  - [Joining existing network](#joining-existing-network)
+    - [Direct join](#direct-join)
+    - [Broadcast](#broadcast)
+    - [DNSSD](#dnssd)
+  - [Allowed IPs](#allowed-ips)
+  - [Leaving network](#leaving-network)
+  - [Limitations](#limitations)
+  - [Customization](#customization)
+  - [Testing](#testing)
+    - [Synchronization test](#synchronization-test)
+    - [NATed test](#nated-test)
+  - [Usage](#usage)
+    - [Running program on localhost](#running-program-on-localhost)
+    - [Running program in test NAT enviroment](#running-program-in-test-nat-enviroment)
 
 ## Requirements
 
@@ -19,12 +37,21 @@ Running the program requires root priviliges, because it interacts with network 
 ## Creating a network
 
 ```bash
-python3 main.py create --ip 10.0.0.1 --sync ALL
+python3 main.py create --ip 10.0.0.1 --prefix 24 --port 51820 --interface wg-0 --sync-port 6881 --interval 1 --forwarded-port --endpoint 127.0.0.1:51820 --sync ALL
 ```
 
-- create - subprogram
-- --ip - virtual ip
-- --sync - synchronization module selection (DHT|MQ|Gossip|ALL)
+**bold** are mandatory
+
+- **create** - subprogram
+- **--ip** - virtual ip
+- --prefix - default 24 - Wg interface mask, combines with ip 
+- --port - default 51820 - WireGuard port
+- --interface - default wg0 - WireGuard interface name
+- --sync-port - default 6881 - synchronization port, used for synchronization modules communication
+- --interval - default 1 - synchronization interval in seconds
+- --forwarded-port - default False - if set, the program will override the port discovered from STUN
+- --endpoint - default None - if set, the program will set the endpoint to this value instead of using STUN
+- **--sync** - synchronization module selection (DHT|MQ|Gossip|ALL)
 
 After you can enable discovery modules by:
 ```
@@ -52,29 +79,60 @@ You can start discovery modules just like the create peer after you join the net
 ### Direct join
 
 ```bash
-python3 main.py join <peer_ip> --ip 10.0.0.2
+python3 main.py join <peer_ip> --bootstrap-port 17777 --ip 10.0.0.2 --prefix 24 --port 51821 --interface wg-0 --sync-port 6881 --interval 1 --forwarded-port --endpoint 127.0.0.1:51820
 ```
 
-- join - direct join subprogram
-- --ip - selected virtual ip
+**bold** are mandatory
+
+- **join** - direct join subprogram
+- **<peer_ip>** - public IP of peer to join through
+- --bootstrap-port - default 17777 - port of the peer to join through
+- **--ip** - selected virtual ip
+- --prefix - default 24 - Wg interface mask, combines with ip
+- --port - default 51820 - WireGuard port
+- --interface - default wg0 - WireGuard interface name
+- --sync-port - default 6881 - synchronization port, used for synchronization modules communication
+- --interval - default 1 - synchronization interval in seconds
+- --forwarded-port - default False - if set, the program will override the port discovered from STUN
+- --endpoint - default None - if set, the program will set the endpoint to this value instead of using STUN
 
 ### Broadcast
 
 ```bash
-python3 main.py broadcast --ip 10.0.0.3
+python3 main.py broadcast --ip 10.0.0.3 --bootstrap-port 18888 --ip 10.0.0.2 --prefix 24 --port 51821 --interface wg-0 --sync-port 6881 --interval 1 --forwarded-port --endpoint 127.0.0.1:51820
 ```
 
-- broadcast - broadcast subprogram
-- --ip - selected virtual ip
+**bold** are mandatory
+
+- **broadcast** - broadcast subprogram
+- **--ip** - selected virtual ip
+- --bootstrap-port - default 18888 - port to broadcast on
+- **--ip** - selected virtual ip
+- --prefix - default 24 - Wg interface mask, combines with ip
+- --port - default 51820 - WireGuard port
+- --interface - default wg0 - WireGuard interface name
+- --sync-port - default 6881 - synchronization port, used for synchronization modules communication
+- --interval - default 1 - synchronization interval in seconds
+- --forwarded-port - default False - if set, the program will override the port discovered from STUN
+- --endpoint - default None - if set, the program will set the endpoint to this value instead of using STUN
 
 ### DNSSD
 
 ```bash
-python3 main.py dnssd --ip 10.0.0.4
+python3 main.py dnssd --ip 10.0.0.4 --prefix 24 --port 51821 --interface wg-0 --sync-port 6881 --interval 1 --forwarded-port --endpoint 127.0.0.1:51820
 ```
 
-- dnssd - dnssd subprogram
-- --ip - selected virtual ip
+**bold** are mandatory
+
+- **dnssd** - dnssd subprogram
+- **--ip** - selected virtual ip
+- --prefix - default 24 - Wg interface mask, combines with ip
+- --port - default 51820 - WireGuard port
+- --interface - default wg0 - WireGuard interface name
+- --sync-port - default 6881 - synchronization port, used for synchronization modules communication
+- --interval - default 1 - synchronization interval in seconds
+- --forwarded-port - default False - if set, the program will override the port discovered from STUN
+- --endpoint - default None - if set, the program will set the endpoint to this value instead of using STUN
 
 After you can select discovery method you want to join through by its index.
 
@@ -103,12 +161,12 @@ exit
 
 ## Limitations
 
-Script only works when not behind SYMETRIC-NAT or behind network components that act like one. Port scanning is not implemented it uses the public ip and port discovered from STUN.
-In theese situations you need to manualy add mapping to the wireguard port on your router.
+Script only works when not behind SYMETRIC-NAT (endpoint dependant NAT) or behind network components that act like one. Port scanning is not implemented it uses the public ip and port discovered from STUN.
+In theese situations you need to manualy add mapping to the wireguard port on your router and use the `--forwarded-port` or `--endpoint` arguments.
 
 If 2 nodes are in the same private network and want to connect, your router needs to support NAT loopback or Hairpin NAT so theese nodes are accesible through their public address even within their private network. The router doesnt try to find peers private ips.
 
-DHT module sometimes struggles when repeatadly joining and leaving a network. Its because it takes a while to clearout its routing table from disconected peers.
+DHT module sometimes struggles when repeatadly joining and leaving a network. Its because it takes a while to clear out its routing table from disconected peers.
 
 ## Customization
 
@@ -164,9 +222,20 @@ To cleanup run:
 ./test_nat.sh clean
 ```
 
+## Usage
+
+When you run the program you need to make sure you eighter have Endpoint independant NAT or you have to manually forward the wireguard port and use the:
+
+* `--forwarded-port` argument to override the port discovered from STUN.
+
+or
+
+* `--endpoint` argument to set the forwarded endpoint manualy.
+
+
 ### Running program on localhost
 
-To test manualy on localhost you need to run stun.py script and when running the peers use more arguments to avoid port and wireguard interface conflicts.
+To test manualy on localhost you need to run stun.py script and when running the peers use more arguments to avoid port and wireguard interface conflicts. You can run your stun or set the endpoints manualy using the `--endpoint` argument, but the stun server is provided.
 
 Run stun.py:
 
@@ -202,15 +271,13 @@ python3 src/main.py dnssd --ip 10.0.0.2 --port 51821 --interface wg1 --sync-port
 
 ### Running program in test NAT enviroment
 
-If you want to try the program out i provided a Linux VM image.
-
-Once you are in the VM build the containers using
+If you want to try out the program in izolated envirometnment with simulated full cone NAT, you can use the provided docker-compose file.
 
 ```bash
 docker-compose -f docker-compose-norun.yaml build
 ```
 
-and run them
+and run them (only works on Linux because of network configuration)
 
 ```bash
 ./test_nat.sh norun

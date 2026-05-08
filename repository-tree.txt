@@ -33,6 +33,7 @@
 │   └── stun - my stun server for testing
 │       ├── Dockerfile.stun
 │       └── stun.py
+├── docker-compose-norun.yaml - Docker Compose configuration without running the test
 ├── docker-compose.yaml - Docker Compose configuration for NAT scenario test
 ├── test_nat.sh - script to run the NAT scenario test
 ├── test_sync.sh - script to run the synchronization test

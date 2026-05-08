@@ -37,6 +37,7 @@ class MessageQueueSync(SyncBase):
         self._sub = self._context.socket(zmq.SUB)
         self._sub.setsockopt_string(zmq.SUBSCRIBE, "")
 
+
         # add self to peers list
         self._peers[self._state.ip] = {
             "virtual_ip": self._state.ip,
@@ -135,7 +136,15 @@ class MessageQueueSync(SyncBase):
 
     def publishChange(self, virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int, 
                       allowed_ips: list | None = None, sync_port: int | None = None) -> None:
-        """ Publishes a change to the MQ state."""
+        """ Publishes a change to the MQ state.
+            Args:
+                virtual_ip: The virtual IP of the peer.
+                public_key: The public key of the peer.
+                endpoint_ip: The endpoint IP of the peer.
+                endpoint_port: The endpoint port of the peer.
+                allowed_ips: The allowed IPs for the peer. If None, it defaults to the virtual IP with a /32 mask.
+                sync_port: If set, sub connects to virtual_ip:sync_port.
+        """
         val = {
             "virtual_ip": virtual_ip,
             "public_key": public_key,
@@ -241,7 +250,7 @@ class MessageQueueSync(SyncBase):
         }
         print(f"[MQ] Publishing departure notice")
         self._pub.send_string(json.dumps(msg))
-        time.sleep(2) # give some time for message to be sent before shutting down sockets
+        time.sleep(1) # give some time for message to be sent before shutting down sockets
         
 
 

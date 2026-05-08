@@ -27,6 +27,7 @@ def add_common_args(p):
     p.add_argument('--sync-port', type=int, default=6881, help='Port for synchronization service (takes range of ports <port-1;port+1> )')
     p.add_argument('--interval', type=int, default=1, help='Time interval to check for changes in seconds')
     p.add_argument('--forwarded-port', action='store_true', help='Is the port forwarded? When selected overrides port from STUN with --port value')
+    p.add_argument('--endpoint', type=str, help='Manually specify endpoint in format ip:port (overrides STUN)')
 
 join_parser = subparsers.add_parser('join', help='Join an existing network')
 join_parser.add_argument('target_host', type=str, help='Target host to join')
@@ -37,6 +38,12 @@ join_parser.set_defaults(func='join-direct')
 def join_direct(args):
     """ Function initialize program in direct join mode. """
     state = State(args.ip, port=args.port, interface=args.interface, prefix=args.prefix)
+    if args.endpoint:
+        print(f"Manually setting endpoint to {args.endpoint}...")
+        endpoint_ip, endpoint_port = args.endpoint.split(":")
+        state.set_endpoint(endpoint_ip, int(endpoint_port))
+    else:
+        state.discover_endpoint()
 
     dis = DiscoveryJoin(state, None, bootstrap_port=args.bootstrap_port)
     try:
@@ -45,8 +52,6 @@ def join_direct(args):
         print(f"Error during JOIN: {e}")
         state.disableNetlink()
         exit(1)
-
-
 
     if sync_info["sync-type"] == "DHT":
         sync = SyncDHT(state, seed_node=(sync_info["sync-ip"], sync_info["sync-port"]), port=args.sync_port)
@@ -60,7 +65,9 @@ def join_direct(args):
         sync_mq = MessageQueueSync(state, seed_node=mq_info["sync-seed"], port=args.sync_port, interval=args.interval)
         sync_dht = SyncDHT(state, seed_node=(dht_info["sync-ip"], dht_info["sync-port"]), port=args.sync_port-1, interval=args.interval)
         sync_gossip = SyncGossip(state, seed_node=gossip_info["sync-seed"], port=args.sync_port+1, interval=args.interval)
-        sync = AllSync(state, [sync_dht, sync_gossip, sync_mq])
+        sync_list = [sync_mq, sync_gossip, sync_dht]
+        sync = AllSync(state, sync_list)
+        state.enableAllSyncMode(len(sync._sync_list))
         
     return state, sync
 
@@ -72,6 +79,12 @@ broadcast_parser.set_defaults(func='broadcast_discover')
 def broadcast_discover(args):
     """ Function initialize program in broadcast discovery mode. """
     state = State(args.ip, port=args.port, interface=args.interface, prefix=args.prefix)
+    if args.endpoint:
+        print(f"Manually setting endpoint to {args.endpoint}...")
+        endpoint_ip, endpoint_port = args.endpoint.split(":")
+        state.set_endpoint(endpoint_ip, int(endpoint_port))
+    else:
+        state.discover_endpoint()
 
     dis = DiscoveryBroadcast(state, bootstrap_port=args.bootstrap_port, injected_sync=None)
 
@@ -95,7 +108,9 @@ def broadcast_discover(args):
         sync_mq = MessageQueueSync(state, seed_node=mq_info["sync-seed"], port=args.sync_port, interval=args.interval)
         sync_dht = SyncDHT(state, seed_node=(dht_info["sync-ip"], dht_info["sync-port"]), port=args.sync_port-1, interval=args.interval)
         sync_gossip = SyncGossip(state, seed_node=gossip_info["sync-seed"], port=args.sync_port+1, interval=args.interval)
-        sync = AllSync(state, [sync_dht, sync_gossip, sync_mq])
+        sync_list = [sync_mq, sync_gossip, sync_dht]
+        sync = AllSync(state, sync_list)
+        state.enableAllSyncMode(len(sync_list))
         
     return state, sync
 
@@ -105,7 +120,6 @@ dnssd_parser.set_defaults(func='dnssd_discover')
 
 def dnssd_discover(args):
     """ Function initialize program in DNSSD discovery mode. """
-    # state = State(args.ip, port=args.port, interface=args.interface)
 
     dis = DiscoveryDNSSD()
 
@@ -137,6 +151,12 @@ def create(args):
     if args.forwarded_port:
         f_port = args.port
     state = State(args.ip, port=args.port, interface=args.interface, prefix=args.prefix, forwarded_port=f_port)
+    if args.endpoint:
+        print(f"Manually setting endpoint to {args.endpoint}...")
+        endpoint_ip, endpoint_port = args.endpoint.split(":")
+        state.set_endpoint(endpoint_ip, int(endpoint_port))
+    else:
+        state.discover_endpoint()
 
     sync = None
     if args.sync == "DHT":
@@ -150,7 +170,9 @@ def create(args):
         sync_mq = MessageQueueSync(state, seed_node=None, port=args.sync_port+2, interval=args.interval)
         sync_dht = SyncDHT(state, port=args.sync_port, interval=args.interval)
         sync_gossip = SyncGossip(state, port=args.sync_port+1, interval=args.interval)
-        sync = AllSync(state, [sync_dht, sync_gossip, sync_mq])
+        sync_list = [sync_mq, sync_gossip, sync_dht]
+        sync = AllSync(state, sync_list)
+        state.enableAllSyncMode(len(sync_list))
     else:
         print("Unsupported synchronization method specified.")
         exit(1)
@@ -192,9 +214,9 @@ Available commands:
 - ping : Ping all peers in the network
 - add-allowed-ips : Add an allowed IP to local node for other peers to route through this node
 - remove-allowed-ips : Remove an allowed IP from local node
-- force-check : Force synchronization module to check for changes and update peers immediately
 """
     print(help_msg)
+    print("*********READY*********")
     while run_flag:
         try:
             input_val = input()

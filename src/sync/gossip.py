@@ -159,7 +159,7 @@ class SyncGossip(SyncBase):
             )
         except Exception as e:
             self._send_lock.release()
-            raise
+            raise e
         
         msg = {
             "type": STATE_UPDATE,
@@ -190,7 +190,15 @@ class SyncGossip(SyncBase):
 
     def publishChange(self, virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int, 
                       allowed_ips: list | None = None, sync_port: int | None=None) -> None:
-        """ Publishes a change to the gossip state. """
+        """ Sets a peer to the gossip state. 
+            Arguments:
+                virtual_ip: The virtual IP of the peer that changed.
+                public_key: The peers public key.
+                endpoint_ip: The public IP of the peer.
+                endpoint_port: The public port of the peer.
+                allowed_ips: The allowed IPs of the peer. If None, it will be set to default.
+                sync_port: Not used in Gossip.
+        """
         print(f"[Gossip] Publishing changes to Gossip network...")
         self._version += 1
 

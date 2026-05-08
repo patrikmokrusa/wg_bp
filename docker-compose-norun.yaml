@@ -23,8 +23,6 @@ services:
     command: >
         sh -c "
               cd src;
-              sleep 10;
-              python3 -u main.py create --ip 10.0.0.1 --sync Gossip < ../test/create-nat-scenario.txt
               tail -f /dev/null"
     network_mode: "none"
 
@@ -46,6 +44,7 @@ services:
       context: .
       dockerfile: test/Dockerfile.router
     privileged: true
+
     command: >
         sh -c "
               sleep 3;
@@ -55,6 +54,16 @@ services:
               iptables -A FORWARD -i eth1 -o eth0 -m state --state RELATED,ESTABLISHED -j ACCEPT;
               iptables -A FORWARD -i eth1 -m state --state NEW -j DROP;
               tail -f /dev/null"
+    
+    # command: >
+    #     sh -c "
+    #           sleep 3;
+    #           iptables -t raw -A PREROUTING -i eth1 -m conntrack --ctstate NEW -j DROP
+    #           iptables -t nat -A POSTROUTING -o eth1 -j SNAT --to-source 172.20.4.2 --random-fully;
+    #           iptables -A FORWARD -i eth0 -o eth1 -j ACCEPT;
+    #           iptables -A FORWARD -i eth1 -o eth0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT;
+    #           iptables -P FORWARD DROP;
+    #           tail -f /dev/null"
     # NAT
     # command: >
     #     sh -c "
@@ -75,8 +84,6 @@ services:
     privileged: true
     command: >
       sh -c "cd src;
-            sleep 13;
-            python3 -u main.py join 172.20.3.2 --port 2020 --ip 10.0.0.2 < ../test/join-hang_scenario.txt;
             tail -f /dev/null"
     network_mode: "none"
 
@@ -86,6 +93,7 @@ services:
       context: .
       dockerfile: test/Dockerfile.router
     privileged: true
+
     command: >
         sh -c "
               sleep 3;
@@ -95,6 +103,16 @@ services:
               iptables -A FORWARD -i eth1 -o eth0 -m state --state RELATED,ESTABLISHED -j ACCEPT
               iptables -A FORWARD -i eth1 -m state --state NEW -j DROP;
               tail -f /dev/null"
+
+    # command: >
+    #     sh -c "
+    #           sleep 3;
+    #           iptables -t raw -A PREROUTING -i eth1 -m conntrack --ctstate NEW -j DROP;
+    #           iptables -t nat -A POSTROUTING -o eth1 -j SNAT --to-source 172.20.1.2 --random-fully;
+    #           iptables -A FORWARD -i eth0 -o eth1 -j ACCEPT;
+    #           iptables -A FORWARD -i eth1 -o eth0 -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT;
+    #           iptables -P FORWARD DROP;
+    #           tail -f /dev/null"
     # NAT
     # command: >
     #     sh -c "
@@ -115,8 +133,6 @@ services:
     privileged: true
     command: >
       sh -c "cd src;
-            sleep 16;
-            python3 -u main.py join 172.20.3.2 --port 3030 --ip 10.0.0.3 < ../test/join-hang_scenario.txt;
             tail -f /dev/null"
     network_mode: "none"
 

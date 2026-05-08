@@ -129,7 +129,15 @@ class SyncDHT(SyncBase):
 
     def publishChange(self, virtual_ip: str, public_key: str, endpoint_ip: str, endpoint_port: int, 
                       allowed_ips: list | None = None, sync_port: int | None = None) -> None:
-        """ Publishes a change to the DHT. """
+        """ Publishes a change to the DHT. 
+            Args:
+                virtual_ip: The virtual IP of the peer.
+                public_key: The public key of the peer.
+                endpoint_ip: The endpoint IP of the peer.
+                endpoint_port: The endpoint port of the peer.
+                allowed_ips: The allowed IPs for the peer. If None, it defaults to the virtual IP with a /32 mask.
+                sync_port: Not used in DHT synchronization.
+        """
         print("[DHT] Publishing changes to DHT...")
 
         val = {

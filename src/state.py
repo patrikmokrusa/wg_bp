@@ -63,22 +63,28 @@ class State:
         self.port = port
         """ The port for the WireGuard interface. """
         self._forwarded_port = forwarded_port
-        self.peers = {} # peer_virtual_ip: {public_key : key_str, endpoint_ip : endpoint_str}
+        self.peers = {}
         """ Dictionary of peers in the network. Maps virtual IPs to their public keys and endpoint information. """
         self.interface = interface
         """ The name of the WireGuard interface. """
         self._keepalive = keepalive
-        self.public_ip = None
-        """ The public IP address determined by STUN. """
         self.prefix = prefix
         """ The subnet prefix length for the WireGuard interface. """
+        self.public_ip = None
+        """ The public IP address determined by STUN. """
         self.public_port = None
         """ The public port determined by STUN. """
-        self._update_public_ip()
-        self._iplinkInit()
         self._lock = threading.Lock()
+        self._all_sync_mode = 0
+        """ Enables some all sync behaviour. """
 
         self.allowed_ips = [f"{self.ip}/32"]
+        self._iplinkInit()
+
+    def enableAllSyncMode(self, num_of_syncs: int) -> None: # last minute hack for AllSync
+        """ Used when AllSync is used as the synchronization mechanism. Only deletes a peer if majority aggrees. """
+        self._all_sync_mode = num_of_syncs - 1
+        self._all_deleted_cnt = {}
 
     def lock_aquire(self, requester) -> None:
         """ Acquires the state lock. Should be used when modifying the state to prevent collisions between different modules."""
@@ -88,6 +94,18 @@ class State:
     def lock_release(self) -> None:
         """ Releases the state lock. Should be used when modifying the state to prevent collisions between different modules."""
         self._lock.release()
+
+    def discover_endpoint(self) -> None:
+        """ Discovers the endpoint using STUN. """
+        self.netlinkDown()
+        self._update_public_ip()
+        self.netlinkUp()
+
+    def set_endpoint(self, endpoint_ip: str, endpoint_port: int) -> None:
+        """ Sets the public endpoint of this node. """
+        self.public_ip = endpoint_ip
+        self.public_port = endpoint_port
+
 
     def _iplinkInit(self) -> None:
         """ Initializes the WireGuard interface using pyroute2. """
@@ -114,36 +132,6 @@ class State:
             private_key=self.private_key,
             listen_port=self.port
         )
-
-    def _updatePeerAfterHandshake(self, virtual_ip: str) -> tuple:
-        """ Not used. Waits for handshake completion with a peer and updates its endpoint information. """
-        wg = WireGuard()
-
-        wait = True
-        while wait:
-            info = wg.info(self.interface)
-            attrs = info[0]['attrs']
-            attrs = dict(attrs)
-            
-            peers = attrs['WGDEVICE_A_PEERS']
-            for peer in peers:
-                peer_attrs = dict(peer['attrs'])
-                if f"{virtual_ip}/32" in peer_attrs["WGPEER_A_ALLOWEDIPS"][0]['addr']:
-                    if peer_attrs["WGPEER_A_RX_BYTES"] == 0:
-                        print(f"[STATE] Handshake with peer {virtual_ip} not completed yet. Waiting...")
-                        time.sleep(0.1)
-                        continue
-                    endpoint = peer_attrs['WGPEER_A_ENDPOINT']
-                    addr = endpoint['addr']
-                    port = endpoint['port']
-                    # self.peers[virtual_ip]["endpoint_ip"] = addr
-                    # self.peers[virtual_ip]["endpoint_port"] = port
-                    wait = False
-                    print(f"[STATE] Updated peer {virtual_ip} endpoint to {endpoint['addr']}:{endpoint['port']}")
-                    break
-        wg.close()
-        return addr, port
-
 
     def _wg_set(self, interface, **kwargs) -> None:
         """ Helper method to set WireGuard configuration in a separate event loop. """
@@ -307,6 +295,12 @@ class State:
 
     def remove_peer(self, peer_virtual_ip: str) -> None:
         """ Removes a peer from the state and WireGuard configuration. """
+        if self._all_sync_mode:
+            self._all_deleted_cnt[peer_virtual_ip] = self._all_deleted_cnt.get(peer_virtual_ip, 0) + 1
+            if self._all_deleted_cnt[peer_virtual_ip] < self._all_sync_mode:
+                return
+            del self._all_deleted_cnt[peer_virtual_ip]
+
         if peer_virtual_ip in self.peers:
 
             try:
