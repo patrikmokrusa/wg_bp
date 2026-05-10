@@ -14,8 +14,8 @@ from cryptography.hazmat.primitives.asymmetric import x25519
 from cryptography.hazmat.primitives import serialization
 
 STUN_SERVERS = [
-    ("stun.l.google.com", 19302),
     ("stun.nextcloud.com", 443),
+    ("stun.l.google.com", 19302),
     ("stun1.l.google.com", 19302),
 ]
 """ List of public STUN servers. """

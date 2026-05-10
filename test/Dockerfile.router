@@ -2,4 +2,4 @@ FROM alpine:latest
 RUN apk add --no-cache iptables iproute2
 RUN apk add tcpdump
 RUN apk add conntrack-tools
-# This ensures the container stays running
+

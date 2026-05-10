@@ -12,14 +12,17 @@ To begin you start the program with initial arguments, and after that you can in
     - [Direct join](#direct-join)
     - [Broadcast](#broadcast)
     - [DNSSD](#dnssd)
-  - [Allowed IPs](#allowed-ips)
-  - [Leaving network](#leaving-network)
+  - [Working the program](#working-the-program)
+    - [Enabling discovery](#enabling-discovery)
+    - [Allowed IPs](#allowed-ips)
+    - [Leaving network](#leaving-network)
   - [Limitations](#limitations)
   - [Customization](#customization)
   - [Testing](#testing)
     - [Synchronization test](#synchronization-test)
     - [NATed test](#nated-test)
   - [Usage](#usage)
+    - [Running on LAN](#running-on-lan)
     - [Running program on localhost](#running-program-on-localhost)
     - [Running program in test NAT enviroment](#running-program-in-test-nat-enviroment)
 
@@ -52,22 +55,6 @@ python3 main.py create --ip 10.0.0.1 --prefix 24 --port 51820 --interface wg-0 -
 - --forwarded-port - default False - if set, the program will override the port discovered from STUN
 - --endpoint - default None - if set, the program will set the endpoint to this value instead of using STUN
 - **--sync** - synchronization module selection (DHT|MQ|Gossip|ALL)
-
-After you can enable discovery modules by:
-```
-discover-join
-```
-
-or
-
-```
-discover-broadcast
-```
-
-and start advertising them with:
-```
-advertise
-```
 
 ## Joining existing network
 
@@ -136,7 +123,31 @@ python3 main.py dnssd --ip 10.0.0.4 --prefix 24 --port 51821 --interface wg-0 --
 
 After you can select discovery method you want to join through by its index.
 
-## Allowed IPs
+## Working the program
+
+While in network you can interact with it by typing commands in the terminal.
+
+### Enabling discovery
+
+You can enable discovery modules by:
+
+```
+discover-join
+```
+
+or
+
+```
+discover-broadcast
+```
+
+and start advertising them with:
+
+```
+advertise
+```
+
+### Allowed IPs
 
 While in a network you can add allowed_ips, that are accessable through your node for other peers to route traficc through you.
 You can do this by typing:
@@ -151,7 +162,7 @@ And to remove them:
 remove-allowed-ips
 ```
 
-## Leaving network
+### Leaving network
 
 You can leave network by using Ctrl+C or by typing:
 
@@ -230,8 +241,23 @@ When you run the program you need to make sure you eighter have Endpoint indepen
 
 or
 
-* `--endpoint` argument to set the forwarded endpoint manualy.
+* `--endpoint` argument to set the public endpoint for the local node manualy.
 
+### Running on LAN
+
+When all nodes are on the same LAN use the `--endpoint` argument with the local IP and port of WireGuard interface.
+
+Create the network:
+
+```bash
+python3 src/main.py create --ip 10.0.0.1 --endpoint 192.168.0.2:51820 --sync MQ
+```
+
+On lan its nice to use broadcast discovery, so you can join through it by:
+
+```bash
+python3 src/main.py broadcast --ip 10.0.0.2 --endpoint 192.168.0.3:51820
+```
 
 ### Running program on localhost
 
@@ -252,7 +278,7 @@ Run the first peer in a terminal and choose sync.
 python3 src/main.py create --ip 10.0.0.1 --sync ALL
 ```
 
-To enable discovery see [creating network](#creating-a-network).
+To enable discovery see [Working with the program](#working-the-program).
 
 Run the second peer from a different terminal using one of following:
 
