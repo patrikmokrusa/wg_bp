@@ -147,12 +147,11 @@ class SyncGossip(SyncBase):
 
     async def _sendStateToPeer(self, peer_ip: str, peer_port: int | None, departure: bool = False) -> None:
         """ Sends the full state to a specific peer. """
-        self._send_lock.acquire()
-
         if peer_port is None:
             # print(f"[Gossip] Peer {peer_ip} not onboarded yet, cannot send state.")
-            self._send_lock.release()
             return
+
+        self._send_lock.acquire()
 
         try:
             reader, writer = await asyncio.wait_for(
@@ -246,8 +245,8 @@ class SyncGossip(SyncBase):
             contacted_peers.append(random_peer_ip)
             
             try:
+                print(f"[Gossip] Departure message sending to {random_peer_ip}")
                 await self._sendStateToPeer(random_peer_ip, self._peers[random_peer_ip]["sync_port"], departure=True)
-                print(f"[Gossip] Departure message sent to {random_peer_ip}")
             except Exception as e:
                 print(f"[Gossip] Failed to send departure message to {random_peer_ip}: {e}")
                 if random_peer_ip not in self._state.peers.keys():
@@ -266,17 +265,15 @@ class SyncGossip(SyncBase):
             self.loop.call_soon_threadsafe(self.shutdown_event.set)
         
         # Wait for gossip task to finish
-        print(f"[Gossip] Waiting for gossip task to finish...")
         if self._gossip_task:
             try:
-                self._gossip_task.result()
+                self._gossip_task.result(timeout=5)
             except:
                 pass
     
         # Send final state
-        print(f"[Gossip] Sending final state to peers...")
         try:
-            self._createTask(self._sendLastGossip()).result()
+            self._createTask(self._sendLastGossip()).result(timeout=5)
         except:
             pass
         

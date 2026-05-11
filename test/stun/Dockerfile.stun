@@ -2,7 +2,6 @@ FROM python:3.12
 
 WORKDIR /app
 
-# Copy repo into container
 COPY ./test/stun/ . 
 
 RUN apt-get update

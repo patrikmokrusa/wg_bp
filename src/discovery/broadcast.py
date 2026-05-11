@@ -108,6 +108,7 @@ class DiscoveryBroadcast(DiscoveryBase):
 
     def startJoin(self, bootstrap_node: str = None, sync_port: int = None) -> dict:
         """ Starts broadcasting a JOIN request to the local network to discover and join existing nodes. """
+        print(f"[BCAST] Broadcasting JOIN request to local network...")
         client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         client.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
 
