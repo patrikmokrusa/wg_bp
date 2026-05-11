@@ -81,9 +81,9 @@ class State:
         self.allowed_ips = [f"{self.ip}/32"]
         self._iplinkInit()
 
-    def enableAllSyncMode(self, num_of_syncs: int) -> None: # last minute hack for AllSync
+    def enableAllSyncMode(self, num_of_syncs: int) -> None: # hack for AllSync
         """ Used when AllSync is used as the synchronization mechanism. Only deletes a peer if majority aggrees. """
-        self._all_sync_mode = num_of_syncs - 1
+        self._all_sync_mode = num_of_syncs #// 2 + 1 # majority of syncs
         self._all_deleted_cnt = {}
 
     def lock_aquire(self, requester) -> None:

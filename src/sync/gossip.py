@@ -135,7 +135,8 @@ class SyncGossip(SyncBase):
                     await self._sendStateToPeer(random_peer_ip, self._peers[random_peer_ip]["sync_port"])
                 except Exception as e:
                     if random_peer_ip not in self._state.peers.keys():
-                        del self._peers[random_peer_ip]
+                        if random_peer_ip in self._peers.keys():
+                            del self._peers[random_peer_ip]
             
             # Wait for interval or shutdown event
             try:
@@ -237,6 +238,8 @@ class SyncGossip(SyncBase):
                 random_peer_ip = random.choice(list(self._peers.keys()))
                 if random_peer_ip in contacted_peers:
                     continue
+                if random_peer_ip == self._state.ip:
+                    continue
                 else:
                     break
 
@@ -246,8 +249,10 @@ class SyncGossip(SyncBase):
                 await self._sendStateToPeer(random_peer_ip, self._peers[random_peer_ip]["sync_port"], departure=True)
                 print(f"[Gossip] Departure message sent to {random_peer_ip}")
             except Exception as e:
+                print(f"[Gossip] Failed to send departure message to {random_peer_ip}: {e}")
                 if random_peer_ip not in self._state.peers.keys():
-                    del self._peers[random_peer_ip]
+                    if random_peer_ip in self._peers.keys():
+                        del self._peers[random_peer_ip]
                     return
     
 
@@ -261,15 +266,17 @@ class SyncGossip(SyncBase):
             self.loop.call_soon_threadsafe(self.shutdown_event.set)
         
         # Wait for gossip task to finish
+        print(f"[Gossip] Waiting for gossip task to finish...")
         if self._gossip_task:
             try:
-                self._gossip_task.result(timeout=5)
+                self._gossip_task.result()
             except:
                 pass
     
         # Send final state
+        print(f"[Gossip] Sending final state to peers...")
         try:
-            self._createTask(self._sendLastGossip()).result(timeout=5)
+            self._createTask(self._sendLastGossip()).result()
         except:
             pass
         

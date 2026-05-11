@@ -65,7 +65,7 @@ def join_direct(args):
         sync_mq = MessageQueueSync(state, seed_node=mq_info["sync-seed"], port=args.sync_port, interval=args.interval)
         sync_dht = SyncDHT(state, seed_node=(dht_info["sync-ip"], dht_info["sync-port"]), port=args.sync_port-1, interval=args.interval)
         sync_gossip = SyncGossip(state, seed_node=gossip_info["sync-seed"], port=args.sync_port+1, interval=args.interval)
-        sync_list = [sync_mq, sync_gossip, sync_dht]
+        sync_list = [sync_dht, sync_gossip, sync_mq]
         sync = AllSync(state, sync_list)
         state.enableAllSyncMode(len(sync._sync_list))
         
@@ -108,7 +108,7 @@ def broadcast_discover(args):
         sync_mq = MessageQueueSync(state, seed_node=mq_info["sync-seed"], port=args.sync_port, interval=args.interval)
         sync_dht = SyncDHT(state, seed_node=(dht_info["sync-ip"], dht_info["sync-port"]), port=args.sync_port-1, interval=args.interval)
         sync_gossip = SyncGossip(state, seed_node=gossip_info["sync-seed"], port=args.sync_port+1, interval=args.interval)
-        sync_list = [sync_mq, sync_gossip, sync_dht]
+        sync_list = [sync_dht, sync_gossip, sync_mq]
         sync = AllSync(state, sync_list)
         state.enableAllSyncMode(len(sync_list))
         
@@ -170,7 +170,7 @@ def create(args):
         sync_mq = MessageQueueSync(state, seed_node=None, port=args.sync_port+2, interval=args.interval)
         sync_dht = SyncDHT(state, port=args.sync_port, interval=args.interval)
         sync_gossip = SyncGossip(state, port=args.sync_port+1, interval=args.interval)
-        sync_list = [sync_mq, sync_gossip, sync_dht]
+        sync_list = [sync_dht, sync_gossip, sync_mq]
         sync = AllSync(state, sync_list)
         state.enableAllSyncMode(len(sync_list))
     else:

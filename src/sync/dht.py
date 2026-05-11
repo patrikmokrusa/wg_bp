@@ -37,11 +37,13 @@ class SyncDHT(SyncBase):
         self._loop_thread.start()
         
         self._listener_loop = asyncio.new_event_loop()
-        self._listener_dht = Server(alpha=4)
+        self._listener_dht = Server()
+        self._listener_dht.refresh_table(interval=5)
         self._listener_thread = threading.Thread(target=self._run_loop, args=(self._listener_loop,), daemon=True)
         self._listener_thread.start()
         self._server_loop = asyncio.new_event_loop()
-        self._dht = Server(alpha=4)
+        self._dht = Server()
+        self._dht.refresh_table(interval=5) 
         self._server_thread = threading.Thread(target=self._run_loop, args=(self._server_loop,), daemon=True)
         self._server_thread.start()
         
