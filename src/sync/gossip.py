@@ -152,14 +152,13 @@ class SyncGossip(SyncBase):
             return
 
         self._send_lock.acquire()
-
+        print(f"[Gossip] Sending state to peer {peer_ip}:{peer_port}...")
         try:
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(peer_ip, peer_port), timeout=1
             )
-        except Exception as e:
+        except Exception:
             self._send_lock.release()
-            raise e
         
         msg = {
             "type": STATE_UPDATE,
@@ -232,7 +231,7 @@ class SyncGossip(SyncBase):
         if len(self._peers) <= 0:
             return
 
-        for _ in range(min(DEGREE, len(self._peers))):
+        for _ in range(min(DEGREE, len(self._peers.keys()))):
             while True:
                 random_peer_ip = random.choice(list(self._peers.keys()))
                 if random_peer_ip in contacted_peers:
@@ -247,6 +246,7 @@ class SyncGossip(SyncBase):
             try:
                 print(f"[Gossip] Departure message sending to {random_peer_ip}")
                 await self._sendStateToPeer(random_peer_ip, self._peers[random_peer_ip]["sync_port"], departure=True)
+                print(f"[Gossip] Departure sent")
             except Exception as e:
                 print(f"[Gossip] Failed to send departure message to {random_peer_ip}: {e}")
                 if random_peer_ip not in self._state.peers.keys():

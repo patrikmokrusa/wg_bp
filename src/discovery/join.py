@@ -151,7 +151,6 @@ class DiscoveryJoin(DiscoveryBase):
         print(f"[JOIN] Joining the network via bootstrap node: {bootstrap_node}")
 
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.settimeout(20)
             sock.connect((bootstrap_node, self._bootstrap_port))
             content = self._state.interface_json()
             content["sync_port"] = sync_port

@@ -38,12 +38,12 @@ class SyncDHT(SyncBase):
         
         self._listener_loop = asyncio.new_event_loop()
         self._listener_dht = Server()
-        self._listener_dht.refresh_table(interval=5)
+        self._listener_dht.refresh_table(interval=10)
         self._listener_thread = threading.Thread(target=self._run_loop, args=(self._listener_loop,), daemon=True)
         self._listener_thread.start()
         self._server_loop = asyncio.new_event_loop()
         self._dht = Server()
-        self._dht.refresh_table(interval=5) 
+        self._dht.refresh_table(interval=10) 
         self._server_thread = threading.Thread(target=self._run_loop, args=(self._server_loop,), daemon=True)
         self._server_thread.start()
         
@@ -156,13 +156,15 @@ class SyncDHT(SyncBase):
 
         self._setValueSync(virtual_ip, val)
 
+        key_list = self._getValueSync(KEY_LIST_KEY)
+        if virtual_ip not in key_list:
+            key_list.append(virtual_ip)
+        self._setValueSync(KEY_LIST_KEY, key_list)
+
         old = self._getValueSync(CHANGE_CHECK_KEY)
         self._setValueSync(CHANGE_CHECK_KEY, old + 1)
         self._CurrentChangeCheckValue = self._CurrentChangeCheckValue + 1
 
-        key_list = self._getValueSync(KEY_LIST_KEY)
-        key_list.append(virtual_ip)
-        self._setValueSync(KEY_LIST_KEY, key_list)
 
     def _checkForChangeTrigger(self) -> None:
         """ 
