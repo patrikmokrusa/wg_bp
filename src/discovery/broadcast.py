@@ -139,8 +139,8 @@ class DiscoveryBroadcast(DiscoveryBase):
                 content ["port"]
             )
 
-        except Exception as e:
-            print(f"[BCAST] Error occurred while sending join request. error: {e}")
+        except:
+            print(f"[BCAST] Error occurred while sending join request.")
         finally:
             client.close()
         

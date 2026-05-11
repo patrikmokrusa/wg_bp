@@ -152,7 +152,7 @@ class SyncGossip(SyncBase):
             return
 
         self._send_lock.acquire()
-        print(f"[Gossip] Sending state to peer {peer_ip}:{peer_port}...")
+        # print(f"[Gossip] Sending state to peer {peer_ip}:{peer_port}...")
         try:
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(peer_ip, peer_port), timeout=1
